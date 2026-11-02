@@ -1,0 +1,32 @@
+# SafeTune environment — ISOLATED Python >= 3.12 (condition 1).
+# Pins captured from the verified sandbox install of 2026-11-02
+# (CPython 3.12.16 via uv; CPU torch; safetune from PyPI).
+#
+# Bootstrap (Linux/macOS; Colab already ships Python 3.12 — verify with
+# `python -V` and skip the uv step there):
+#
+#   pip install uv
+#   uv python install 3.12
+#   uv venv --python 3.12 .venv-safetune
+#   uv pip install --python .venv-safetune/bin/python "torch==2.7.1" \
+#       --index-url https://download.pytorch.org/whl/cpu     # or CUDA build on Colab
+#   uv pip install --python .venv-safetune/bin/python -r requirements/requirements-safetune-py312.txt
+#
+# NOTE: transformers 5.22.1 matches the Phase-2 environment's major/minor line
+# and satisfies safetune's pin (>=5.15,<6) — no conflict between phases.
+
+safetune==0.1.10
+torch==2.7.1
+transformers==5.22.1
+tokenizers==0.23.3
+huggingface-hub==2.4.0
+accelerate==1.15.0
+peft==0.21.2
+trl==1.14.2
+bitsandbytes==0.50.2
+datasets==5.1.0
+numpy==2.5.4
+lm-eval==0.4.13
+wandb==0.31.0
+pytest==9.2.0
+PyYAML==6.0.3

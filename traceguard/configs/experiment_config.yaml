@@ -1,0 +1,15 @@
+# TraceGuard experiment configuration — Phase 2 stub.
+#
+# Scope note: E0-E4 configuration definitions (baseline, prompt-only,
+# turn-local provenance, persistent provenance, SafeTune-only, combined)
+# depend on Member 3's runtime/gateway and Member 2's episode dataset and
+# will be added in Phase 5 after interface agreement. This file currently
+# only wires the smoke test; nothing here tunes the acceptance gate.
+
+experiment:
+  project: traceguard
+  phase: 2
+  smoke:
+    enabled: true
+    runner: traceguard.experiments.smoke_test
+  configurations: {}   # populated in Phase 5 (E0..E4) — identical gateway across E2a/E2b/E4

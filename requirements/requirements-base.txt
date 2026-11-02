@@ -1,0 +1,24 @@
+# TraceGuard Member-1 base requirements — PINNED from the verified sandbox
+# install of 2026-11-02 (Python 3.11.2, Linux x86_64, CPU-only).
+#
+# torch: the +cpu local version comes from
+#   pip install "torch==2.7.1" --index-url https://download.pytorch.org/whl/cpu
+# On Colab GPU runtimes install the matching CUDA build instead (same 2.7.x line).
+#
+# transformers 5.22.1 satisfies SafeTune's pin (>=5.15,<6), so Phase 3 will not
+# require a conflicting downgrade. safetune itself additionally requires
+# Python >= 3.12 (sandbox here is 3.11 — Colab/Python 3.12 needed for Phase 3).
+torch==2.7.1
+transformers==5.22.1
+tokenizers==0.23.3
+huggingface-hub==2.4.0
+safetensors==0.8.0
+accelerate==1.15.0
+numpy==2.4.6
+PyYAML==6.0.3
+regex==2026.9.29
+filelock==4.2.4
+tqdm==4.70.1
+
+# test-only
+pytest==9.2.0

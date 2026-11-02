@@ -1,0 +1,36 @@
+# TraceGuard Member-1 model & smoke-test configuration.
+# Revisions pinned from HF API inspection on 2026-11-02 (see
+# docs/PHASE1_INSPECTION.md). Both Aya checkpoints are GATED: accept the
+# license with your HF account and export HF_TOKEN before running Track B.
+
+defaults:
+  device: auto          # auto -> cuda if available else cpu
+  dtype: auto           # auto -> bfloat16 on cuda, float32 on cpu
+  seed: 1234
+
+models:
+  primary:
+    id: CohereLabs/tiny-aya-global
+    revision: af89d219b53ed9b13b8a4645f9c8028973510324
+  fallback:
+    id: CohereLabs/aya-expanse-8b
+    revision: 5062468bf9bc0c6035fd64e06274333ec127d980
+  sandbox_probe:
+    id: hf-internal-testing/tiny-random-gpt2   # ungated; infrastructure tests only
+    revision: null
+
+generation:
+  do_sample: false
+  temperature: null
+  top_p: null
+  max_new_tokens: 512
+
+smoke:
+  tasks_path: traceguard/configs/smoke_tasks.jsonl
+  tools_path: traceguard/configs/tools.yaml
+  # Acceptance gate (master prompt §B) — DO NOT relax:
+  min_pass: 8
+  critical_failures_allowed: 0
+  total_tasks: 10
+
+results_dir: results
