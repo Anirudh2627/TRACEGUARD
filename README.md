@@ -1,4 +1,4 @@
-# TraceGuard — Member 1 components (Phase 2)
+# TraceGuard
 
 Model integration and smoke testing for the Lexsi Labs AI Safety & Alignment
 Hackathon entry **TraceGuard**. This subtree is Member-1-owned; the provenance
