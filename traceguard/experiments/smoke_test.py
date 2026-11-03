@@ -49,7 +49,7 @@ from traceguard.models.config import load_app_config, resolve_path
 from traceguard.models.generation import GenerationBackend, GenerationSettings
 from traceguard.models.json_parser import ToolRegistry, load_tool_registry
 from traceguard.models.mock_backend import ScriptedMockBackend
-from traceguard.models.prompt_builder import TaskSetup, build_messages
+from traceguard.models.prompt_builder import PROMPT_MODES, TaskSetup, build_messages
 
 logger = logging.getLogger("traceguard.smoke")
 
@@ -116,6 +116,7 @@ def run_smoke(
     seed: int = 1234,
     configuration_name: str = "smoke",
     dataset_meta: Optional[dict[str, Any]] = None,
+    prompt_mode: str = "E1",
 ) -> AcceptanceResult:
     """Execute the full smoke test and persist all artifacts. Returns the gate."""
     out_dir = Path(out_dir)
@@ -128,14 +129,19 @@ def run_smoke(
     except ImportError:  # mock-only runs do not need torch
         pass
 
+    if prompt_mode not in PROMPT_MODES:
+        raise ValueError(
+            f"unknown prompt_mode {prompt_mode!r}; expected one of {sorted(PROMPT_MODES)}"
+        )
     started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     experiment_id = f"smoke-{started_at.replace(':', '').replace('-', '')}"
     logger.info(
-        "smoke run start experiment_id=%s backend=%s tasks=%d min_pass=%d",
+        "smoke run start experiment_id=%s backend=%s tasks=%d min_pass=%d prompt_mode=%s",
         experiment_id,
         backend.name,
         len(tasks),
         min_pass,
+        prompt_mode,
     )
 
     raw_path = out_dir / "raw_outputs.jsonl"
@@ -143,12 +149,13 @@ def run_smoke(
     with raw_path.open("w", encoding="utf-8") as raw_fh:
         for task in tasks:
             setup = TaskSetup.from_dict(task.setup)
-            messages = build_messages(task.user_message, registry, setup)
+            messages = build_messages(task.user_message, registry, setup, prompt_mode=prompt_mode)
             record = backend.generate(messages)
             outcome = score_task(task, record, registry)
             outcomes.append(outcome)
             raw_line = {
                 "task_id": task.task_id,
+                "prompt_mode": prompt_mode,
                 "record": record.to_dict(),
                 "outcome": outcome.to_dict(),
             }
@@ -168,7 +175,7 @@ def run_smoke(
 
     results_path = out_dir / "results.json"
     with results_path.open("w", encoding="utf-8") as fh:
-        json.dump(acceptance.to_dict(), fh, indent=2, ensure_ascii=False)
+        json.dump({**acceptance.to_dict(), "prompt_mode": prompt_mode}, fh, indent=2, ensure_ascii=False)
         fh.write("\n")
 
     manifest = build_manifest(
@@ -181,6 +188,7 @@ def run_smoke(
         started_at=started_at,
         finished_at=finished_at,
         artifact_paths=[str(raw_path), str(results_path), str(out_dir / "errors.log")],
+        extra={"prompt_mode": prompt_mode, "prompt_mode_spec": PROMPT_MODES[prompt_mode].note},
     )
     manifest_path = write_manifest(manifest, out_dir)
 
@@ -258,6 +266,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--dtype", default="auto", choices=("auto", "bfloat16", "float16", "float32"))
     parser.add_argument("--load-in-4bit", action="store_true", help="bitsandbytes NF4 (CUDA only)")
     parser.add_argument("--max-new-tokens", type=int, default=None)
+    parser.add_argument(
+        "--prompt-mode", default=None, choices=sorted(PROMPT_MODES),
+        help="override smoke.prompt_mode from config (E0..E4 prompt factorization)",
+    )
     args = parser.parse_args(argv)
 
     config = load_app_config(args.config)
@@ -305,6 +317,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         critical_failures_allowed=smoke_cfg.critical_failures_allowed,
         seed=settings.seed,
         configuration_name=f"smoke:{args.model}",
+        prompt_mode=args.prompt_mode or smoke_cfg.prompt_mode,
     )
     print(
         json.dumps(

@@ -132,7 +132,9 @@ def _system_with_email(setup_kwargs=None) -> str:
         private_files=("hr/salary_report_2026.csv",),
         **(setup_kwargs or {}),
     )
-    return build_system_message(REGISTRY, setup)
+    # Labeled rendering is the E2-family context renderer (review patch 2):
+    # provenance labels/delimiters exist only in E2a/E2b/E4 prompts.
+    return build_system_message(REGISTRY, setup, prompt_mode="E2b")
 
 
 def test_trusted_and_untrusted_sections_are_separated():
@@ -183,7 +185,7 @@ def test_unknown_provenance_label_is_rejected_loudly():
     import pytest
 
     with pytest.raises(ValueError, match="unknown provenance label"):
-        build_system_message(REGISTRY, setup)
+        build_system_message(REGISTRY, setup, prompt_mode="E2b")
 
 
 def test_anti_spoofing_rule_present():

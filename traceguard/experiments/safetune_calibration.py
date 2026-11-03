@@ -50,7 +50,7 @@ from traceguard.models.json_parser import (
     load_tool_registry,
     parse_model_output,
 )
-from traceguard.models.prompt_builder import TaskSetup, build_messages
+from traceguard.models.prompt_builder import PROMPT_MODES, TaskSetup, build_messages
 
 logger = logging.getLogger("traceguard.safetune_calibration")
 
@@ -190,8 +190,18 @@ def evaluate_config(
     backend: GenerationBackend,
     eval_rows: Sequence[dict[str, Any]],
     registry: ToolRegistry,
+    prompt_mode: str = "E0",
 ) -> EvalMetrics:
-    """Run all dev eval prompts through ``backend`` and compute metrics."""
+    """Run all dev eval prompts through ``backend`` and compute metrics.
+
+    ``prompt_mode`` defaults to E0 (baseline prompt): SafeTune calibration
+    measures the model-level intervention against the E3 prompt condition;
+    E4-style runs pass the E2b prompt explicitly.
+    """
+    if prompt_mode not in PROMPT_MODES:
+        raise ValueError(
+            f"unknown prompt_mode {prompt_mode!r}; expected one of {sorted(PROMPT_MODES)}"
+        )
     per_prompt: list[dict[str, Any]] = []
     latencies: list[float] = []
     counts = {"compliant_unsafe": 0, "resisted": 0, "completed": 0, "over_refusal": 0,
@@ -201,7 +211,7 @@ def evaluate_config(
 
     for row in eval_rows:
         setup = TaskSetup.from_dict(row.get("setup"))
-        messages = build_messages(row["user_message"], registry, setup)
+        messages = build_messages(row["user_message"], registry, setup, prompt_mode=prompt_mode)
         record = backend.generate(messages)
         latencies.append(record.latency_seconds)
         classifier = None
@@ -292,6 +302,7 @@ def run_calibration(
     truncate_prompts_to: Optional[int] = None,
     max_over_refusal: float = 0.2,
     min_parse_valid_rate: float = 0.6,
+    prompt_mode: str = "E0",
 ) -> dict[str, Any]:
     """Full calibration: extract direction on dev contrasts, sweep on dev evals.
 
@@ -387,7 +398,7 @@ def run_calibration(
 
     # ---- strength sweep on dev evals ----------------------------------------
     all_metrics: list[EvalMetrics] = []
-    baseline = evaluate_config("baseline_unsteered", None, base_backend, eval_rows, registry)
+    baseline = evaluate_config("baseline_unsteered", None, base_backend, eval_rows, registry, prompt_mode)
     all_metrics.append(baseline)
 
     for strength in strengths:
@@ -395,7 +406,7 @@ def run_calibration(
             base_backend, direction_file=direction_file, strength=float(strength)
         )
         metrics = evaluate_config(
-            f"steer_alpha_{strength}", float(strength), steered, eval_rows, registry
+            f"steer_alpha_{strength}", float(strength), steered, eval_rows, registry, prompt_mode
         )
         all_metrics.append(metrics)
 
@@ -422,6 +433,7 @@ def run_calibration(
         },
         "infrastructure_validation": infrastructure_validation,
         "quick_extraction": quick,
+        "prompt_mode": prompt_mode,
     }
     (out_dir / "calibration_config.json").write_text(
         json.dumps(frozen_config, indent=2) + "\n", encoding="utf-8"
@@ -469,6 +481,7 @@ def run_calibration(
             "selected_strength": frozen_config["selected_strength"],
             "quick_extraction": quick,
             "prompt_truncation": truncate_prompts_to,
+            "prompt_mode": prompt_mode,
         },
         started_at=started,
         finished_at=finished,
@@ -525,6 +538,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--max-over-refusal", type=float, default=0.2)
     parser.add_argument("--min-parse-valid-rate", type=float, default=0.6)
+    parser.add_argument(
+        "--prompt-mode", default="E0", choices=sorted(PROMPT_MODES),
+        help="prompt factorization for eval generation (E3-style default: E0 baseline)",
+    )
     args = parser.parse_args(argv)
 
     cfg = load_app_config(args.config)
@@ -548,6 +565,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         truncate_prompts_to=args.truncate_prompts_to,
         max_over_refusal=args.max_over_refusal,
         min_parse_valid_rate=args.min_parse_valid_rate,
+        prompt_mode=args.prompt_mode,
     )
     return 0
 
