@@ -1,0 +1,101 @@
+{
+  "dataset_name": "traceguard_curated_collection",
+  "dataset_version": "1.0.0",
+  "generation_timestamp": "2026-11-03T18:03:51.817350+00:00",
+  "tool_versions": {
+    "curatorkit": "0.1.22",
+    "traceguard_commit": "6c851e1"
+  },
+  "source_files": [
+    {
+      "path": "traceguard\\data",
+      "filename": "data",
+      "sha256": "NOT_A_SINGLE_FILE"
+    }
+  ],
+  "curated_output": {
+    "path": "traceguard\\data\\curated",
+    "filename": "curated",
+    "sha256": "NOT_A_SINGLE_FILE"
+  },
+  "metrics": {
+    "episode_count": 60,
+    "attack_count": 30,
+    "benign_count": 30,
+    "dev_count": 30,
+    "test_count": 30,
+    "attack_family_distribution": {
+      "family_a": 12,
+      "family_b": 10,
+      "family_c": 8,
+      "benign": 30
+    },
+    "unique_templates_count": 26,
+    "template_ids": [
+      "benign_contact_clarification",
+      "benign_contract_review",
+      "benign_doc_search",
+      "benign_email_billing",
+      "benign_email_search",
+      "benign_invoice_processing",
+      "benign_legal_review",
+      "benign_meeting_notes",
+      "benign_note_retrieval",
+      "benign_note_staging",
+      "benign_policy_search",
+      "benign_support_triage",
+      "benign_verified_dispatch",
+      "cross_turn_injection_01",
+      "doc_injection_01",
+      "doc_injection_02",
+      "doc_injection_03",
+      "email_injection_01",
+      "email_injection_02",
+      "memory_poisoning_01",
+      "search_injection_01",
+      "search_injection_02",
+      "search_injection_03",
+      "stored_injection_01",
+      "stored_injection_02",
+      "tool_output_injection_01"
+    ],
+    "unique_canary_count": 30,
+    "provenance_labels_distribution": {
+      "UNTRUSTED_EXTERNAL": 143,
+      "DERIVED_UNTRUSTED": 165,
+      "SYSTEM_CONFIG": 7
+    }
+  },
+  "cleaning_operations": {},
+  "duplicate_findings": {},
+  "quality_gate_results": {
+    "status": "PASSED",
+    "passed": true,
+    "total_checks_run": 65,
+    "passed_checks_count": 65,
+    "failed_checks_count": 0,
+    "warning_count": 0,
+    "violations": [],
+    "metrics": {
+      "total_episodes": 60,
+      "attack_episodes_total": 30,
+      "benign_episodes_total": 30,
+      "dev_episodes_total": 30,
+      "test_episodes_total": 30,
+      "attack_dev_count": 15,
+      "attack_test_count": 15,
+      "benign_dev_count": 15,
+      "benign_test_count": 15,
+      "family_distribution": {
+        "family_a": 12,
+        "family_b": 10,
+        "family_c": 8,
+        "benign": 30
+      },
+      "unique_canaries_count": 30,
+      "attack_dev_templates_count": 7,
+      "attack_test_templates_count": 6,
+      "template_overlap_count": 0
+    }
+  }
+}
