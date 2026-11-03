@@ -5,7 +5,11 @@
 
 defaults:
   device: auto          # auto -> cuda if available else cpu
-  dtype: auto           # auto -> bfloat16 on cuda, float32 on cpu
+  # dtype auto is hardware-aware (review patch P1): bfloat16 ONLY on GPUs with
+  # native support (compute capability >= 8.0, Ampere+); float16 on T4-class
+  # GPUs (capability < 8.0) — including the 4-bit compute dtype; float32 on CPU.
+  # The resolved value is recorded in each run's manifest/backend description.
+  dtype: auto
   seed: 1234
 
 models:
@@ -32,5 +36,11 @@ smoke:
   min_pass: 8
   critical_failures_allowed: 0
   total_tasks: 10
+  # Prompt factorization (review patch 2): E1 = baseline protocol + untrusted-
+  # content instructions == the approved Phase-2 smoke semantics. E0 (pure
+  # baseline) and the E2a/E2b/E4 provenance-labeled prompts are available via
+  # --prompt-mode for configuration runs; the value used is recorded in every
+  # artifact (raw_outputs.jsonl, results.json, manifest.json).
+  prompt_mode: E1
 
 results_dir: results

@@ -37,6 +37,12 @@ class SmokeConfig:
     min_pass: int = 8
     critical_failures_allowed: int = 0
     total_tasks: int = 10
+    #: Prompt configuration for the smoke run. Default "E1" = baseline
+    #: protocol + untrusted-content instructions, which reproduces the
+    #: approved Phase-2 smoke semantics (the P2 provenance-label additions
+    #: are conditional and NOT part of model acceptance). Recorded in every
+    #: artifact so results are never ambiguous about which prompt ran.
+    prompt_mode: str = "E1"
 
 
 @dataclass(frozen=True)
@@ -68,10 +74,19 @@ def load_app_config(path: str | Path | None = None) -> AppConfig:
             min_pass=int(smoke_doc.get("min_pass", 8)),
             critical_failures_allowed=int(smoke_doc.get("critical_failures_allowed", 0)),
             total_tasks=int(smoke_doc.get("total_tasks", 10)),
+            prompt_mode=str(smoke_doc.get("prompt_mode", "E1")),
         )
         if smoke_doc
         else None
     )
+    if smoke is not None:
+        from traceguard.models.prompt_builder import PROMPT_MODES
+
+        if smoke.prompt_mode not in PROMPT_MODES:
+            raise ValueError(
+                f"smoke.prompt_mode {smoke.prompt_mode!r} invalid; "
+                f"expected one of {sorted(PROMPT_MODES)}"
+            )
     return AppConfig(
         defaults=doc.get("defaults") or {},
         generation=doc.get("generation") or {},

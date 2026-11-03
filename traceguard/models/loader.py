@@ -36,6 +36,44 @@ class LoadingPlan:
     device: str  # "cuda" | "cpu"
     dtype: str  # "bfloat16" | "float16" | "float32" | "auto"
     load_in_4bit: bool
+    cuda_bf16_supported: Optional[bool] = None  # None when no CUDA present
+
+
+def cuda_supports_bf16() -> bool:
+    """Hardware capability check for native bfloat16 on the current GPU.
+
+    Native BF16 requires NVIDIA compute capability >= 8.0 (Ampere+).
+    T4 (7.5), V100 (7.0) and older do NOT support it natively — those must
+    run in FP16. Returns False (with a logged reason) when CUDA is absent or
+    the capability cannot be queried, so 'auto' never selects BF16 blindly.
+    """
+    import torch
+
+    if not torch.cuda.is_available():
+        return False
+    try:
+        major, _minor = torch.cuda.get_device_capability()
+    except Exception as exc:  # capability query failed -> assume no BF16
+        logger.warning("Could not query CUDA capability (%s); assuming no native BF16", exc)
+        return False
+    return major >= 8
+
+
+def _bnb_quant_kwargs(dtype_name: str) -> dict[str, Any]:
+    """BitsAndBytes 4-bit kwargs using the RESOLVED compatible compute dtype.
+
+    Pure function (no bitsandbytes import) so the dtype resolution is testable
+    on machines without CUDA/bitsandbytes. The compute dtype follows the same
+    hardware check as the loading dtype — never hardcoded BF16 (T4-class GPUs
+    do not support it natively).
+    """
+    import torch
+
+    return {
+        "load_in_4bit": True,
+        "bnb_4bit_compute_dtype": _dtype_from_name(dtype_name),
+        "bnb_4bit_quant_type": "nf4",
+    }
 
 
 def resolve_loading_plan(
@@ -45,15 +83,41 @@ def resolve_loading_plan(
     dtype: str = "auto",
     load_in_4bit: bool = False,
 ) -> LoadingPlan:
-    """Turn 'auto' placeholders into concrete device/dtype choices."""
+    """Turn 'auto' placeholders into concrete device/dtype choices.
+
+    dtype='auto' resolution (review patch P1):
+    * CUDA + compute capability >= 8.0 -> bfloat16
+    * CUDA + capability < 8.0 (e.g. T4/7.5) or unknown -> float16
+    * CPU -> float32
+    An explicitly requested dtype is honored, but requesting bfloat16 on a GPU
+    without native support logs a loud warning.
+    """
     import torch
 
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
     if device not in ("cuda", "cpu"):
         raise ValueError(f"unsupported device {device!r} (use 'auto', 'cuda', 'cpu')")
-    if dtype == "auto":
-        dtype = "bfloat16" if device == "cuda" else "float32"
+
+    bf16_supported: Optional[bool] = None
+    if device == "cuda":
+        bf16_supported = cuda_supports_bf16()
+        if dtype == "auto":
+            dtype = "bfloat16" if bf16_supported else "float16"
+            logger.info(
+                "CUDA dtype auto-resolved to %s (bf16 native support: %s)",
+                dtype,
+                bf16_supported,
+            )
+        elif dtype == "bfloat16" and not bf16_supported:
+            logger.warning(
+                "bfloat16 explicitly requested but this GPU lacks native BF16 "
+                "(compute capability < 8.0, e.g. T4); expect emulation overhead "
+                "or errors — consider --dtype float16"
+            )
+    elif dtype == "auto":
+        dtype = "float32"
+
     if load_in_4bit and device == "cpu":
         raise ValueError("4-bit loading (bitsandbytes) requires a CUDA device")
     if device == "cpu" and not load_in_4bit:
@@ -63,7 +127,7 @@ def resolve_loading_plan(
             model_id,
             dtype,
         )
-    return LoadingPlan(model_id, revision, device, dtype, load_in_4bit)
+    return LoadingPlan(model_id, revision, device, dtype, load_in_4bit, bf16_supported)
 
 
 def _hf_token() -> Optional[str]:
@@ -139,10 +203,17 @@ def load_transformers_backend(
     if load_in_4bit:
         from transformers import BitsAndBytesConfig
 
+        # Compute dtype follows the resolved plan (FP16 on T4-class GPUs,
+        # BF16 only where natively supported) — never hardcoded.
+        compute_dtype_name = plan.dtype
+        if compute_dtype_name == "float32":
+            compute_dtype_name = "float16"
+            logger.warning(
+                "4-bit loading with dtype=float32 requested; bitsandbytes compute "
+                "dtype must be fp16/bf16 — using float16"
+            )
         model_kwargs["quantization_config"] = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=_dtype_from_name("bfloat16"),
-            bnb_4bit_quant_type="nf4",
+            **_bnb_quant_kwargs(compute_dtype_name)
         )
     else:
         # transformers renamed torch_dtype -> dtype across the 4.x/5.x line;

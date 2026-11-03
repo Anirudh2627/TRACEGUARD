@@ -89,3 +89,66 @@ def test_installed_api_matches_source_expectations():
     trainer_init = inspect.signature(runner.RefusalDirectionTrainer.__init__).parameters
     assert {"layers", "alpha", "orthogonalize"} <= set(trainer_init)
     assert float(trainer_init["alpha"].default) == 20.0
+
+
+# ---------- review patch P4: hook cleanup under failure ----------
+
+def _assert_no_residual_hooks(model):
+    from safetune._refusal_helpers import _get_decoder_layers
+
+    layers = _get_decoder_layers(model)
+    assert layers, "layer discovery must work for this check"
+    residual = {i: len(l._forward_hooks) for i, l in enumerate(layers) if len(l._forward_hooks)}
+    assert not residual, f"residual forward hooks after failure: {residual}"
+
+
+def test_probe_hook_cycle_cleans_up_when_generation_raises(tiny_backend, monkeypatch):
+    from traceguard.experiments.safetune_compat import probe_model
+
+    model = tiny_backend.model
+    original_generate = model.generate
+    calls = {"n": 0}
+
+    def flaky_generate(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:  # first call = baseline, second = steered
+            raise RuntimeError("simulated generation failure")
+        return original_generate(*args, **kwargs)
+
+    monkeypatch.setattr(model, "generate", flaky_generate)
+    report = probe_model(
+        model, tiny_backend.tokenizer, model_id="probe-cleanup-test",
+        n_prompts=4, quick=True, max_new_tokens=4,
+    )
+    hook_step = next(s for s in report["steps"] if s["name"] == "hook_cycle")
+    assert hook_step["status"] == "fail"
+    assert "simulated generation failure" in hook_step["error"]
+    _assert_no_residual_hooks(model)  # try/finally removed every hook
+
+
+def test_steered_backend_removes_hooks_when_inner_generation_raises(tiny_backend, tmp_path):
+    import torch
+
+    from traceguard.models.steered_backend import SteeredBackend
+
+    direction_file = tmp_path / "refusal_direction.pt"
+    hidden = tiny_backend.model.config.n_embd
+    torch.save(
+        {"direction": torch.randn(hidden), "layer_idx": 0, "meta": {"model_id": "t"}},
+        direction_file,
+    )
+
+    class BoomInner:
+        name = "transformers"
+        model = tiny_backend.model
+
+        def describe(self):
+            return {"backend": "transformers", "model_id": "dummy", "revision": None}
+
+        def generate(self, messages):
+            raise RuntimeError("simulated inner failure")
+
+    backend = SteeredBackend(BoomInner(), direction_file, strength=1.0)
+    with pytest.raises(RuntimeError, match="simulated inner failure"):
+        backend.generate([{"role": "user", "content": "hi"}])
+    _assert_no_residual_hooks(tiny_backend.model)

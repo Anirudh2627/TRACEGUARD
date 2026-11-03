@@ -207,13 +207,17 @@ def probe_model(
             model, direction=direction, mode="steer", strength=5.0
         )
         wrapper.install()
-        n_hooks = len(wrapper._handles)
-        with torch.no_grad():
-            steered = tokenizer.decode(
-                model.generate(prompt["input_ids"], pad_token_id=pad, **gen_kwargs)[0],
-                skip_special_tokens=True,
-            )
-        wrapper.remove()
+        # Review patch P4: hooks are removed via try/finally so a failing
+        # generation can never leave residual hooks on the model.
+        try:
+            n_hooks = len(wrapper._handles)
+            with torch.no_grad():
+                steered = tokenizer.decode(
+                    model.generate(prompt["input_ids"], pad_token_id=pad, **gen_kwargs)[0],
+                    skip_special_tokens=True,
+                )
+        finally:
+            wrapper.remove()
         with torch.no_grad():
             restored = tokenizer.decode(
                 model.generate(prompt["input_ids"], pad_token_id=pad, **gen_kwargs)[0],
@@ -264,8 +268,12 @@ def probe_model(
         wrapped, calib_meta = result
         from safetune.steer import RefusalDirectionModel
 
-        assert isinstance(wrapped, RefusalDirectionModel), f"got {type(wrapped).__name__}"
-        wrapped.remove()
+        # Review patch P4: guaranteed cleanup even if assertions fail.
+        try:
+            assert isinstance(wrapped, RefusalDirectionModel), f"got {type(wrapped).__name__}"
+        finally:
+            if isinstance(wrapped, RefusalDirectionModel):
+                wrapped.remove()
         steps.append(
             StepResult(
                 "runner_trainer_calibrate",
