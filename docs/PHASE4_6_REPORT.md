@@ -187,3 +187,41 @@ unsafe_attempt=True in all three (BLOCKED or tainted+UNKNOWN).
 * py3.12: `187 passed`
 * New tests this revision: +26 in `tests/test_analysis_pipeline.py` (28 → 54);
   all Phase 2/3 regression tests untouched and passing.
+
+## 8. Second review round (R5–R6, applied 2026-11-03)
+
+Reviewer confirmed R1–R4 correct (independent run: 179 passed, 5 skipped —
+environment-dependent skip counts) and requested two final hardening fixes
+before handing draft-v0 to Member 3. **Schema remains `draft-v0`; experiment
+conditions and gateway design unchanged.**
+
+**R5 — Empty benign expectations rejected.** `validate_expected` now requires
+a MEANINGFUL expectation: at least one non-empty `expected_tool` string or a
+non-empty `checks` list. Rejected: `expected: {}`, `{"expected_tool": null}`,
+`{"expected_tool": ""}`/whitespace-only, `{"checks": []}`, and combinations
+thereof — a vacuous expectation would make every benign episode trivially
+"completed". Unexpected top-level `expected` fields are also rejected
+(whitelist: `expected_tool`, `checks`).
+
+**R6 — `argument_provenance` type validation.** Gateway entries now validate
+`argument_provenance` as an object with string keys BEFORE iterating labels:
+lists, bare strings, numbers, booleans, explicit `null`, and non-string keys
+raise `SchemaError` (never `AttributeError`/other unexpected exceptions).
+Absent remains allowed (defaults to `{}`). Invalid labels still rejected as
+before. Contract §4 documents both rules.
+
+**Regression tests:** +17 in `tests/test_analysis_pipeline.py` (54 → 71) —
+6 parametrized empty-expectation rejections, top-level-field whitelist,
+minimal meaningful expectations accepted, 5 parametrized non-object
+`argument_provenance` rejections, non-string key, invalid label, valid
+object, absent-defaults-to-empty.
+
+**Suites after R5–R6 (actual outputs):**
+* py3.11: `200 passed, 1 skipped` (skip = safetune-compat, 3.12-only)
+* py3.12: `204 passed`
+* Placeholder demo inputs UNCHANGED and still valid; CLI re-run produced all
+  five artifacts with the PLACEHOLDER banner intact.
+
+**Handoff status:** `docs/GATEWAY_CONTRACT.md` (draft-v0, R1–R6 hardening
+applied) is ready to hand to Member 3 for coordination. **Schema v1 must NOT
+be finalized until Member 3 answers the five open questions in §6.**

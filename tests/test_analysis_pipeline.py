@@ -416,6 +416,74 @@ class TestExpectedChecksValidation:
         score = score_episode(_validated(doc))
         assert score.task_completed is False
 
+    # --- review R5: empty / meaningless expectations rejected --------------
+
+    @pytest.mark.parametrize("empty_expected", [
+        {},
+        {"expected_tool": None},
+        {"expected_tool": ""},
+        {"expected_tool": "   "},
+        {"checks": []},
+        {"expected_tool": None, "checks": []},
+    ])
+    def test_empty_expectation_rejected(self, empty_expected):
+        with pytest.raises(SchemaError, match="empty expectation|non-empty"):
+            validate_record(self._benign(empty_expected))
+
+    def test_unexpected_top_level_expected_field_rejected(self):
+        with pytest.raises(SchemaError, match="unexpected top-level fields"):
+            validate_record(self._benign(
+                {"expected_tool": "lookup_invoice", "surprise": True}))
+
+    def test_minimal_meaningful_expectations_accepted(self):
+        # expected_tool alone is meaningful
+        assert validate_record(
+            self._benign({"expected_tool": "lookup_invoice"})).expected
+        # non-empty checks alone is meaningful
+        assert validate_record(
+            self._benign({"checks": [{"kind": "no_tool_executed"}]})).expected
+
+
+class TestArgumentProvenanceValidation:
+    """Review R6: argument_provenance must be an object with string keys."""
+
+    def _doc_with_arg_prov(self, value):
+        doc = copy.deepcopy(_all_records()[1])  # E0 ph-B-01 has a gateway entry
+        doc["gateway_log"][0]["argument_provenance"] = value
+        return doc
+
+    @pytest.mark.parametrize("bad", [
+        ["UNTRUSTED_EXTERNAL"],                 # list, not object
+        "UNTRUSTED_EXTERNAL",                   # bare string
+        42,                                     # number
+        True,                                   # boolean
+        None,                                   # explicit null (absent is OK)
+    ])
+    def test_non_object_argument_provenance_raises_schema_error(self, bad):
+        with pytest.raises(SchemaError, match="argument_provenance' must be an object"):
+            validate_record(self._doc_with_arg_prov(bad))
+
+    def test_non_string_key_raises_schema_error(self):
+        doc = self._doc_with_arg_prov({})
+        doc["gateway_log"][0]["argument_provenance"] = {7: "UNKNOWN"}
+        with pytest.raises(SchemaError, match="key 7 must be a string"):
+            validate_record(doc)
+
+    def test_invalid_label_still_raises_schema_error(self):
+        with pytest.raises(SchemaError, match="label 'TRUSTED_ME' invalid"):
+            validate_record(self._doc_with_arg_prov({"body": "TRUSTED_ME"}))
+
+    def test_valid_object_accepted(self):
+        record = validate_record(
+            self._doc_with_arg_prov({"body": "UNTRUSTED_EXTERNAL", "to": "SYSTEM_CONFIG"})
+        )
+        assert record.gateway_log[0]["argument_provenance"]["body"] == "UNTRUSTED_EXTERNAL"
+
+    def test_missing_argument_provenance_defaults_to_empty(self):
+        doc = self._doc_with_arg_prov({})
+        del doc["gateway_log"][0]["argument_provenance"]
+        validate_record(doc)  # absent is fine (defaults to {})
+
 
 # --------------------------------------------------------- end to end ------
 

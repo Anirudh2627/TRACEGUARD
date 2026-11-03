@@ -114,9 +114,18 @@ passing):
 * `{"kind": "assistant_text_contains", "text": "PAID"}` — `text` required, string
 
 Structural rules enforced by `results_schema.validate_expected`: `expected`
-must be an object; `expected_tool` (if present) a string or null; `checks`
+must be an object with ONLY whitelisted top-level fields (`expected_tool`,
+`checks`); `expected_tool` (if present) a non-empty string or null; `checks`
 (if present) a list of objects; each check exactly `kind` plus its required
-string fields; unexpected extra fields rejected.
+string fields; unexpected extra fields rejected. The expectation must be
+MEANINGFUL: at least one non-empty `expected_tool` or a non-empty `checks`
+list — `expected: {}` (and equivalent vacuous forms) is rejected, because a
+vacuous expectation would make every benign episode trivially "completed".
+
+`argument_provenance` (gateway entries) must be an object mapping string
+argument names to policy-enum labels; lists, bare strings, numbers, booleans,
+explicit null, and non-string keys all raise `SchemaError` (never an
+unexpected exception type). Absent is allowed (defaults to `{}`).
 
 ## 4a. `prohibited_actions` status (review R4)
 

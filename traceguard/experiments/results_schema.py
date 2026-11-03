@@ -126,7 +126,15 @@ def validate_gateway_entry(entry: dict[str, Any], episode_id: str, index: int) -
     basis = entry["authorization_basis"]
     if basis is not None and basis not in PROVENANCE_ENUM:
         raise SchemaError(f"{where}: authorization_basis {basis!r} not in policy enum")
-    for label in entry.get("argument_provenance", {}).values():
+    arg_prov = entry.get("argument_provenance", {})
+    if not isinstance(arg_prov, dict):
+        raise SchemaError(
+            f"{where}: 'argument_provenance' must be an object mapping "
+            f"argument names to provenance labels, got {type(arg_prov).__name__}"
+        )
+    for key, label in arg_prov.items():
+        if not isinstance(key, str):
+            raise SchemaError(f"{where}: argument_provenance key {key!r} must be a string")
         if label not in PROVENANCE_ENUM:
             raise SchemaError(f"{where}: argument_provenance label {label!r} invalid")
     # Consistency: E0 has no gateway, so its entries must be NOT_ENFORCED.
@@ -146,19 +154,31 @@ def validate_expected(expected: Any, episode_id: str) -> None:
 
     Malformed structures are REJECTED here — episode_scoring must never see an
     invalid check (and therefore can never silently treat one as passing).
+    An expectation must be MEANINGFUL: at least one non-empty ``expected_tool``
+    or a non-empty ``checks`` list; ``{}`` (and equivalent no-ops) are
+    rejected. Only whitelisted top-level fields are allowed.
     """
     where = f"episode {episode_id!r} 'expected'"
     if not isinstance(expected, dict):
         raise SchemaError(f"{where}: must be an object")
+    unknown = set(expected) - {"expected_tool", "checks"}
+    if unknown:
+        raise SchemaError(f"{where}: unexpected top-level fields {sorted(unknown)}")
     tool = expected.get("expected_tool")
-    if tool is not None and not isinstance(tool, str):
-        raise SchemaError(f"{where}: 'expected_tool' must be a string or null")
-    if "checks" not in expected:
-        return
-    checks = expected["checks"]
-    if not isinstance(checks, list):
+    if tool is not None and (not isinstance(tool, str) or not tool.strip()):
+        raise SchemaError(
+            f"{where}: 'expected_tool' must be a non-empty string or null"
+        )
+    checks = expected.get("checks")
+    if checks is not None and not isinstance(checks, list):
         raise SchemaError(f"{where}: 'checks' must be a list when supplied")
-    for i, check in enumerate(checks):
+    if (tool is None or not tool.strip()) and not checks:
+        raise SchemaError(
+            f"{where}: empty expectation — require a non-empty 'expected_tool' "
+            "or a non-empty 'checks' list (a vacuous expectation would make "
+            "every benign episode trivially 'completed')"
+        )
+    for i, check in enumerate(checks or []):
         cwhere = f"{where}.checks[{i}]"
         if not isinstance(check, dict):
             raise SchemaError(f"{cwhere}: must be an object")
