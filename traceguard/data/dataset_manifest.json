@@ -1,0 +1,87 @@
+{
+  "manifest_version": "1.0.0",
+  "dataset_name": "TraceGuard Benchmark Suite",
+  "validation_status": "PASSED",
+  "total_episodes": 60,
+  "attack_count": 30,
+  "benign_count": 30,
+  "dev_count": 30,
+  "test_count": 30,
+  "attack_dev_count": 15,
+  "attack_test_count": 15,
+  "benign_dev_count": 15,
+  "benign_test_count": 15,
+  "attack_family_counts": {
+    "family_a": 12,
+    "family_b": 10,
+    "family_c": 8
+  },
+  "attack_template_ids_by_split": {
+    "dev": [
+      "cross_turn_injection_01",
+      "doc_injection_01",
+      "doc_injection_03",
+      "email_injection_01",
+      "search_injection_01",
+      "stored_injection_01",
+      "tool_output_injection_01"
+    ],
+    "test": [
+      "doc_injection_02",
+      "email_injection_02",
+      "memory_poisoning_01",
+      "search_injection_02",
+      "search_injection_03",
+      "stored_injection_02"
+    ]
+  },
+  "benign_template_ids_by_split": {
+    "dev": [
+      "benign_doc_search",
+      "benign_email_billing",
+      "benign_email_search",
+      "benign_invoice_processing",
+      "benign_legal_review",
+      "benign_note_retrieval",
+      "benign_note_staging"
+    ],
+    "test": [
+      "benign_contact_clarification",
+      "benign_contract_review",
+      "benign_meeting_notes",
+      "benign_policy_search",
+      "benign_support_triage",
+      "benign_verified_dispatch"
+    ]
+  },
+  "provenance_counts": {
+    "DERIVED_UNTRUSTED": 36,
+    "SYSTEM_CONFIG": 2,
+    "UNTRUSTED_EXTERNAL": 28
+  },
+  "canary_count": 30,
+  "unique_canary_count": 30,
+  "tool_usage_counts": {
+    "draft_email": 6,
+    "read_document": 16,
+    "read_email": 12,
+    "read_private_file": 2,
+    "retrieve_notes": 16,
+    "save_note": 7,
+    "search_documents": 22,
+    "search_emails": 10,
+    "send_email": 4
+  },
+  "validation_checks": {
+    "count_validation": "PASSED",
+    "episode_id_uniqueness": "PASSED",
+    "split_consistency": "PASSED",
+    "attack_family_coverage": "PASSED",
+    "template_disjointness": "PASSED",
+    "turn_structure": "PASSED",
+    "provenance_integrity": "PASSED",
+    "canary_uniqueness": "PASSED",
+    "authorization_boundary": "PASSED",
+    "outcome_integrity": "PASSED"
+  }
+}

@@ -30,6 +30,11 @@ from traceguard.data.taxonomy import (
     normalize_family_id,
     validate_taxonomy,
 )
+from traceguard.data.dataset_validator import (
+    DatasetValidator,
+    ValidationResult,
+    validate_dataset,
+)
 
 __all__ = [
     # Module 1
@@ -55,4 +60,8 @@ __all__ = [
     "get_templates_for_family",
     "normalize_family_id",
     "validate_taxonomy",
+    # Module 5
+    "DatasetValidator",
+    "ValidationResult",
+    "validate_dataset",
 ]
