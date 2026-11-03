@@ -8,6 +8,9 @@ venv/
 # Experiment artifacts: keep the tree, ignore run outputs
 results/*
 !results/.gitkeep
+!results/*/
+results/*/*
+!results/*/.gitkeep
 
 # Credentials — NEVER commit
 .env

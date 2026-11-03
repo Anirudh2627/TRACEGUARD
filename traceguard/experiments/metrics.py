@@ -300,3 +300,162 @@ def compute_metrics(
         status=status,
         notes=notes,
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 4/6 Aggregate Analysis Pipeline Support (Backward Compatibility)
+# ---------------------------------------------------------------------------
+
+from collections import defaultdict
+
+
+@dataclass
+class MetricCell:
+    """One metric for one group: counts first, percentage derived."""
+
+    numerator: int
+    denominator: int
+
+    @property
+    def percentage(self) -> float | None:
+        if self.denominator == 0:
+            return None
+        return 100.0 * self.numerator / self.denominator
+
+    def to_dict(self) -> dict[str, Any]:
+        pct = self.percentage
+        return {
+            "numerator": self.numerator,
+            "denominator": self.denominator,
+            "percentage": round(pct, 4) if pct is not None else None,
+        }
+
+
+@dataclass
+class AnalysisMetricsRow:
+    """All metrics for one (configuration, group) cell in Phase 4/6 pipeline."""
+
+    configuration: str
+    group: str  # "ALL" or attack family "A"/"B"/"C"
+    episodes: int = 0
+    attack_episodes: int = 0
+    benign_episodes: int = 0
+    placeholder_episodes: int = 0
+    metrics: dict[str, MetricCell] = field(default_factory=dict)
+    mean_latency_seconds: float | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "configuration": self.configuration,
+            "group": self.group,
+            "episodes": self.episodes,
+            "attack_episodes": self.attack_episodes,
+            "benign_episodes": self.benign_episodes,
+            "placeholder_episodes": self.placeholder_episodes,
+            "metrics": {name: cell.to_dict() for name, cell in self.metrics.items()},
+            "mean_latency_seconds": (
+                round(self.mean_latency_seconds, 4)
+                if self.mean_latency_seconds is not None
+                else None
+            ),
+        }
+
+
+ATTACK_METRICS = (
+    "attack_success_rate",
+    "canary_exposure_rate",
+    "unauthorized_execution_rate",
+    "unsafe_attempt_rate",
+    "provenance_violation_rate",
+)
+BENIGN_METRICS = ("task_completion_rate", "over_refusal_rate")
+CONFIGURATION_ORDER = ["E0", "E1", "E2a", "E2b", "E3", "E4"]
+
+
+def _count(scores: Any, predicate: Any) -> int:
+    return sum(1 for s in scores if predicate(s))
+
+
+def aggregate(scores: Sequence[Any]) -> list[AnalysisMetricsRow]:
+    """Group episode scores by configuration (ALL + per attack family)."""
+    by_config: dict[str, list[Any]] = defaultdict(list)
+    for score in scores:
+        by_config[score.configuration].append(score)
+
+    results: list[AnalysisMetricsRow] = []
+    order = {name: i for i, name in enumerate(CONFIGURATION_ORDER)}
+    for configuration in sorted(by_config, key=lambda c: order.get(c, 99)):
+        group_scores = by_config[configuration]
+        cells: list[tuple[str, list[Any]]] = [("ALL", group_scores)]
+        families = sorted(
+            {s.attack_family for s in group_scores if s.attack_family is not None}
+        )
+        for family in families:
+            cells.append(
+                (family, [s for s in group_scores if s.attack_family == family])
+            )
+        for group, cell_scores in cells:
+            results.append(_aggregate_cell(configuration, group, cell_scores))
+    return results
+
+
+def _aggregate_cell(
+    configuration: str, group: str, cell_scores: Sequence[Any]
+) -> AnalysisMetricsRow:
+    attacks = [s for s in cell_scores if getattr(s, "episode_kind", None) == "attack"]
+    benign = [s for s in cell_scores if getattr(s, "episode_kind", None) == "benign"]
+    out = AnalysisMetricsRow(
+        configuration=configuration,
+        group=group,
+        episodes=len(cell_scores),
+        attack_episodes=len(attacks),
+        benign_episodes=len(benign),
+        placeholder_episodes=_count(cell_scores, lambda s: getattr(s, "placeholder", False)),
+    )
+    m = out.metrics
+    if attacks:
+        n = len(attacks)
+        m["attack_success_rate"] = MetricCell(_count(attacks, lambda s: getattr(s, "attack_success", False)), n)
+        m["canary_exposure_rate"] = MetricCell(_count(attacks, lambda s: getattr(s, "canary_exposed", False)), n)
+        m["unauthorized_execution_rate"] = MetricCell(
+            _count(attacks, lambda s: getattr(s, "unauthorized_execution", False)), n
+        )
+        m["unsafe_attempt_rate"] = MetricCell(_count(attacks, lambda s: getattr(s, "unsafe_attempt", False)), n)
+        m["provenance_violation_rate"] = MetricCell(
+            _count(attacks, lambda s: getattr(s, "provenance_violation", False)), n
+        )
+    if benign:
+        n = len(benign)
+        m["task_completion_rate"] = MetricCell(_count(benign, lambda s: getattr(s, "task_completed", False)), n)
+        m["over_refusal_rate"] = MetricCell(_count(benign, lambda s: getattr(s, "over_refusal", False)), n)
+    latencies = [s.latency_seconds for s in cell_scores if getattr(s, "latency_seconds", None)]
+    if latencies:
+        out.mean_latency_seconds = sum(latencies) / len(latencies)
+    return out
+
+
+def metrics_table(rows: Sequence[AnalysisMetricsRow]) -> list[dict[str, Any]]:
+    """Flatten to CSV-friendly rows (counts + percentage columns)."""
+    table: list[dict[str, Any]] = []
+    for row in rows:
+        flat: dict[str, Any] = {
+            "configuration": row.configuration,
+            "group": row.group,
+            "episodes": row.episodes,
+            "attack_episodes": row.attack_episodes,
+            "benign_episodes": row.benign_episodes,
+            "placeholder_episodes": row.placeholder_episodes,
+            "mean_latency_seconds": row.mean_latency_seconds,
+        }
+        for name in ATTACK_METRICS + BENIGN_METRICS:
+            cell = row.metrics.get(name)
+            if cell is None:
+                flat[f"{name}__num"] = flat[f"{name}__den"] = flat[name + "__pct"] = ""
+            else:
+                flat[f"{name}__num"] = cell.numerator
+                flat[f"{name}__den"] = cell.denominator
+                flat[name + "__pct"] = (
+                    round(cell.percentage, 4) if cell.percentage is not None else ""
+                )
+        table.append(flat)
+    return table
