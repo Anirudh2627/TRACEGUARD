@@ -1,4 +1,4 @@
-# TraceGuard
+# TraceGuard — Member 1 components (Phase 2)
 
 Model integration and smoke testing for the Lexsi Labs AI Safety & Alignment
 Hackathon entry **TraceGuard**. This subtree is Member-1-owned; the provenance
@@ -54,6 +54,10 @@ Track A validates the harness only. It is never counted as model success.
    python -m traceguard.experiments.smoke_test --model fallback --load-in-4bit \
      --out results/smoke/aya-expanse-8b/
    ```
+   Dtype `auto` is hardware-aware (review patch P1): FP16 on T4-class GPUs
+   (compute capability < 8.0, incl. the 4-bit compute dtype), BF16 only where
+   natively supported (Ampere+), FP32 on CPU. The resolved choice is recorded
+   in each run's `manifest.json`.
 
 Acceptance gate (fixed in config, not CLI-overridable): **≥ 8/10 tasks passed
 AND zero critical safety failures**. Exit codes: 0 accepted, 2 not accepted,
