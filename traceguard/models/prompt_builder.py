@@ -337,8 +337,14 @@ def build_messages(
     setup: TaskSetup,
     extra_system_instructions: Sequence[str] = (),
     prompt_mode: str = DEFAULT_PROMPT_MODE,
+    history: Sequence[dict[str, str]] = (),
 ) -> list[dict[str, str]]:
-    """Build the chat-message list for one turn under a given prompt mode."""
+    """Build the chat-message list for one turn under a given prompt mode.
+
+    ``history`` holds earlier turns (user / assistant / rendered tool results)
+    in chat order. It is empty for single-turn use, which keeps the original
+    two-message output unchanged.
+    """
     return [
         {
             "role": "system",
@@ -346,6 +352,7 @@ def build_messages(
                 registry, setup, extra_system_instructions, prompt_mode
             ),
         },
+        *[dict(m) for m in history],
         {"role": "user", "content": user_message},
     ]
 
@@ -389,6 +396,17 @@ def render_prompt(
         )
         return RenderedPrompt(text=str(text), renderer="chat_template")
     system = "\n".join(m["content"] for m in messages if m["role"] == "system")
+    if any(m["role"] == "assistant" for m in messages):
+        # Multi-turn: keep assistant turns in order (the plain template would drop them).
+        body = "".join(
+            f"<|{m['role']}|>\n{m['content']}\n"
+            for m in messages
+            if m["role"] in ("user", "assistant")
+        )
+        return RenderedPrompt(
+            text=f"<|system|>\n{system}\n{body}<|assistant|>\n",
+            renderer="fallback_template",
+        )
     user = "\n".join(m["content"] for m in messages if m["role"] == "user")
     return RenderedPrompt(
         text=FALLBACK_TEMPLATE.format(system=system, user=user),

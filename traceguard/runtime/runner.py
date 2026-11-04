@@ -26,7 +26,13 @@ from traceguard.models.json_parser import (
     load_tool_registry,
     parse_model_output,
 )
-from traceguard.models.prompt_builder import TaskSetup, build_messages
+from traceguard.models.prompt_builder import (
+    DEFAULT_PROMPT_MODE,
+    PROMPT_MODES,
+    TaskSetup,
+    _render_external_item,
+    build_messages,
+)
 from traceguard.runtime.authorization import AuthorizationLedger
 from traceguard.runtime.gateway import GatewayDecision, SafetyGateway
 from traceguard.runtime.logging import EpisodeExecutionLog, TurnExecutionRecord
@@ -109,6 +115,14 @@ class EpisodeRunner:
         canary_leaked = False
         prohibited_action_taken = False
 
+        # Conversation history shown to the model on later turns, rendered per
+        # configuration (labeled provenance for E2a/E2b/E4, neutral otherwise).
+        history: list[dict[str, str]] = []
+        labeled = self.config_name in {"E2a", "E2b", "E4"}
+        prompt_mode = (
+            self.config_name if self.config_name in PROMPT_MODES else DEFAULT_PROMPT_MODE
+        )
+
         for turn in episode.turns:
             # Advance turn in tracker
             tracker.set_turn(turn.turn_id)
@@ -134,6 +148,7 @@ class EpisodeRunner:
                     source="system_config",
                     turn_id=turn.turn_id,
                     provenance=ProvenanceLabel.SYSTEM_CONFIG,
+                    max_uses=1,  # "email me" authorizes exactly one send
                 )
                 ledger.record_authorization(
                     action="draft_email",
@@ -149,15 +164,15 @@ class EpisodeRunner:
                 authorized_scopes=tuple(episode.authorized_scope),
             )
 
-            extra_instructions = (
-                E1_SYSTEM_INSTRUCTIONS if self.config_name == "E1" else ()
-            )
-
+            # E1's prompt-only defense is the E1 prompt mode (untrusted-content
+            # block); E1_SYSTEM_INSTRUCTIONS is kept only for backward compatibility.
             messages = build_messages(
                 user_message=turn.user_message,
                 registry=self.tool_registry,
                 setup=setup,
-                extra_system_instructions=extra_instructions,
+                extra_system_instructions=(),
+                prompt_mode=prompt_mode,
+                history=history,
             )
 
             # Invoke backend generation
@@ -193,6 +208,8 @@ class EpisodeRunner:
             tool_result_dict: Optional[dict[str, Any]] = None
             prohibited_attempted = False
             prohibited_executed = False
+            turn_lineage: Optional[dict[str, Any]] = None
+            rendered_result: Optional[str] = None
 
             if isinstance(parsed, ParseFailure):
                 parse_reason = parsed.reason_code
@@ -254,12 +271,18 @@ class EpisodeRunner:
                         if exposed_canaries:
                             canary_leaked = True
 
+                        if parsed.tool in ("send_email", "draft_email"):
+                            ledger.consume(parsed.tool, str(parsed.arguments.get("to", "")))
+
                         # Track tool output in provenance tracker
-                        tracker.record_tool_output(
-                            tool_name=parsed.tool,
-                            output_content=tool_res.output,
-                            input_provenances=list(arg_provs.values()),
+                        turn_lineage, rendered_result = self._track_tool_output(
+                            tracker=tracker,
+                            tool=parsed.tool,
+                            arguments=parsed.arguments,
+                            output=tool_res.output,
+                            arg_provs=list(arg_provs.values()),
                             turn_id=turn.turn_id,
+                            labeled=labeled,
                         )
                     else:
                         tool_executed = False
@@ -283,8 +306,19 @@ class EpisodeRunner:
                 canary_details=exposed_canaries,
                 prohibited_action_attempted=prohibited_attempted,
                 prohibited_action_executed=prohibited_executed,
+                lineage=turn_lineage,
             )
             turn_records.append(turn_rec)
+
+            # Extend history for the next turn (assistant output is shown verbatim)
+            history.append({"role": "user", "content": turn.user_message})
+            history.append({"role": "assistant", "content": raw_text})
+            if rendered_result is not None:
+                history.append({"role": "user", "content": rendered_result})
+            elif parsed_kind == "tool_call" and not tool_executed:
+                history.append(
+                    {"role": "user", "content": "The requested tool call was not executed."}
+                )
 
         # 5. Calculate overall outcome
         attack_blocked: Optional[bool] = None
@@ -308,6 +342,64 @@ class EpisodeRunner:
             prohibited_action_taken=prohibited_action_taken,
             metadata=dict(episode.metadata),
         )
+
+    @staticmethod
+    def _track_tool_output(
+        tracker: ProvenanceTracker,
+        tool: str,
+        arguments: Mapping[str, Any],
+        output: Any,
+        arg_provs: Sequence[ProvenanceLabel],
+        turn_id: int,
+        labeled: bool,
+    ) -> tuple[Optional[dict[str, Any]], str]:
+        """Update provenance for an executed tool and render its result for history.
+
+        Returns ``(lineage_for_log, text_shown_to_the_model_next_turn)``.
+        """
+        if tool == "save_note":
+            note_id = str(output.get("note_id", ""))
+            record = tracker.register_note(
+                note_id, str(arguments.get("content", "")), turn_id=turn_id
+            )
+            return record.to_dict(), f"Tool result (save_note): saved as {note_id}."
+
+        if tool == "retrieve_notes":
+            records = []
+            blocks: list[str] = []
+            for hit in output or []:
+                record = tracker.register_retrieved_note(
+                    str(hit.get("note_id", "")), turn_id=turn_id
+                )
+                if record is None:
+                    continue
+                records.append(record)
+                if labeled and tracker.mode == "persistent":
+                    # E2b / E4: the model sees the preserved label and parent IDs.
+                    parents = ",".join(record.parent_source_ids)
+                    ident = f"{record.note_id} parents={parents}" if parents else record.note_id
+                    blocks.append(
+                        _render_external_item(record.content, record.provenance.value, ident)
+                    )
+                else:
+                    # E2a and unlabeled configs: raw note text, no provenance annotation.
+                    blocks.append(f"Retrieved note {record.note_id}: {record.content}")
+            lineage = {"retrieved_notes": [r.to_dict() for r in records]}
+            text = "\n".join(blocks) if blocks else "Tool result (retrieve_notes): no notes found."
+            return lineage, text
+
+        ids = [str(arguments[k]) for k in ("email_id", "doc_id") if arguments.get(k)]
+        label = tracker.record_tool_output(
+            tool, output, arg_provs, turn_id=turn_id, source_ids=ids
+        )
+        payload = json.dumps(output, sort_keys=True, default=str)
+        if tool in ("send_email", "draft_email"):
+            return None, f"Tool result ({tool}): {payload}"
+        if labeled:
+            return None, _render_external_item(
+                payload, label.value, ids[0] if ids else f"tool_out_{tool}_{turn_id}"
+            )
+        return None, f"Tool result ({tool}): {payload}"
 
     def _call_backend(self, messages: Sequence[dict[str, str]]) -> str:
         """Call generation backend flexibly supporting GenerationRecord or callable."""

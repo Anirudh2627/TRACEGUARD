@@ -67,7 +67,7 @@ class SimulationAuditBackend:
             # Under E1 (prompt-only defense), model may refuse direct override
             # if explicit system prompt instructions are present
             has_e1_instruction = any(
-                "CRITICAL DEFENSE POLICY" in m.get("content", "")
+                ("CRITICAL DEFENSE POLICY" in m.get("content", "") or "External-content policy" in m.get("content", ""))
                 for m in messages
                 if m.get("role") == "system"
             )
