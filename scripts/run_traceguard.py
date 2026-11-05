@@ -40,6 +40,10 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from traceguard.data.dataset_validator import validate_dataset
 from traceguard.data.schema import Episode
+from traceguard.experiments.analysis_adapter import (
+    export_analysis_records,
+    run_phase_analysis,
+)
 from traceguard.experiments.auditkit_adapter import (
     export_auditkit_evaluation,
     is_auditkit_available,
@@ -143,6 +147,11 @@ def run_evaluation_cli() -> int:
         help="Run dataset validation only without executing episodes.",
     )
     parser.add_argument(
+        "--analysis",
+        action="store_true",
+        help="Execute Phase 4/6 analysis pipeline (results/analysis/).",
+    )
+    parser.add_argument(
         "--auditkit",
         action="store_true",
         help="Export evaluation results in AuditKIT format (results/auditkit/).",
@@ -218,6 +227,11 @@ def run_evaluation_cli() -> int:
     if args.auditkit:
         auditkit_dir.mkdir(parents=True, exist_ok=True)
 
+    analysis_dir = PROJECT_ROOT / "results" / "analysis"
+    analysis_inputs = []
+    if args.analysis:
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+
     # Compute dataset hashes
     dataset_hashes = {
         f"episodes_attack_{s}.jsonl": compute_file_sha256(args.data_dir / f"episodes_attack_{s}.jsonl")
@@ -269,6 +283,20 @@ def run_evaluation_cli() -> int:
                     metrics=metrics, logs=logs, output_dir=auditkit_dir
                 )
 
+            # Phase 4/6 Analysis Export
+            if args.analysis and logs:
+                attack_eps, benign_eps = evaluator.load_episodes(split=s)
+                af_path = analysis_dir / f"{cfg.lower()}_{s}_episode_results.jsonl"
+                export_analysis_records(
+                    logs=logs,
+                    episodes=attack_eps + benign_eps,
+                    output_path=af_path,
+                    model_id=args.model_id if args.mode == "model" else "mock/simulation_audit",
+                    placeholder=(args.mode == "mock"),
+                    allow_test_split=(s == "test"),
+                )
+                analysis_inputs.append(af_path)
+
             atk_blk = metrics.attack_metrics.attack_block_rate.rate * 100
             ben_cmp = metrics.benign_metrics.benign_task_completion_rate.rate * 100
             saf_scr = metrics.overall_scores.safety_score
@@ -282,6 +310,17 @@ def run_evaluation_cli() -> int:
     summary_path = out_dir / "traceguard_master_summary.json"
     with open(summary_path, "w", encoding="utf-8") as f:
         json.dump(master_run_summary, f, indent=2, ensure_ascii=False)
+
+    # 6. Execute Phase 4/6 Analysis Pipeline if requested
+    if args.analysis and analysis_inputs:
+        report_dir = analysis_dir / "report"
+        print(f"\n[PHASE 4/6] Executing Analysis Pipeline across {len(analysis_inputs)} configurations...")
+        run_phase_analysis(
+            inputs=analysis_inputs,
+            out_dir=report_dir,
+            allow_test_split=("test" in splits_to_run),
+        )
+        print(f"  [OK] Analysis report generated: {report_dir / 'report.md'}")
 
     print("\n" + "=" * 72)
     print("EVALUATION COMPLETE — SUMMARY RESULTS")
@@ -306,6 +345,8 @@ def run_evaluation_cli() -> int:
     print(f"Detailed Results Saved To: {out_dir}")
     if args.auditkit:
         print(f"AuditKIT Artifacts Saved To: {auditkit_dir}")
+    if args.analysis:
+        print(f"Phase 4/6 Analysis Saved To: {analysis_dir / 'report'}")
     print(f"Master Summary File:       {summary_path}")
     print("=" * 72)
 
