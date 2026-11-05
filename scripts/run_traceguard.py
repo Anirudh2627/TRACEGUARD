@@ -15,7 +15,7 @@ Coordinates end-to-end multi-turn execution and evaluation across:
 Usage:
     python scripts/run_traceguard.py --mode mock --split dev
     python scripts/run_traceguard.py --mode mock --split test --auditkit
-    python scripts/run_traceguard.py --mode model --model-id CohereLabs/tiny-aya-global
+    python scripts/run_traceguard.py --mode model --model-id CohereLabs/aya-expanse-8b
     python scripts/run_traceguard.py --validation-only
     python scripts/run_traceguard.py --smoke
 """
@@ -117,7 +117,7 @@ def run_evaluation_cli() -> int:
     parser.add_argument(
         "--model-id",
         type=str,
-        default="CohereLabs/tiny-aya-global",
+        default="CohereLabs/aya-expanse-8b",
         help="Model ID for model-backed mode.",
     )
     parser.add_argument(

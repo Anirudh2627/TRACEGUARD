@@ -81,6 +81,24 @@ class SafetyGateway:
                 detail=f"Tool {tool_name!r} is not registered in ToolRegistry",
             )
 
+        # Check required arguments and argument tampering
+        for arg_name, arg_spec in spec.arguments.items():
+            if arg_spec.required and arg_name not in arguments:
+                alias = None
+                if arg_name == "to" and "recipient" in arguments:
+                    alias = "recipient"
+                elif arg_name == "path" and "file_handle" in arguments:
+                    alias = "file_handle"
+                elif arg_name == "doc_id" and "document_id" in arguments:
+                    alias = "document_id"
+                if alias is None:
+                    return GatewayDecision(
+                        decision="DENY",
+                        reason="INVALID_ARGUMENT",
+                        tool=tool_name,
+                        detail=f"Missing required argument {arg_name!r} for tool {tool_name!r}",
+                    )
+
         # Normalize argument provenances
         norm_provs: dict[str, ProvenanceLabel] = {
             k: validate_provenance_label(v) for k, v in argument_provenances.items()
@@ -119,9 +137,23 @@ class SafetyGateway:
         # 4A. Determine target resource for authorization check
         target_resource: Optional[str] = None
         if tool_name in {"draft_email", "send_email"}:
-            target_resource = arguments.get("to")
+            target_resource = arguments.get("to") or arguments.get("recipient")
+            # Also check additional recipients (cc, bcc)
+            for extra_recip_arg in ("cc", "bcc"):
+                extra_val = arguments.get(extra_recip_arg)
+                if extra_val:
+                    extra_recips = extra_val if isinstance(extra_val, list) else [extra_val]
+                    for er in extra_recips:
+                        if not ledger.is_authorized(tool_name, str(er)):
+                            return GatewayDecision(
+                                decision="DENY",
+                                reason="UNAUTHORIZED_ACTION",
+                                tool=tool_name,
+                                argument_provenance=norm_provs,
+                                detail=f"Additional recipient {extra_recip_arg!r} ({er!r}) is not authorized in ledger",
+                            )
         elif tool_name == "read_private_file":
-            target_resource = arguments.get("path")
+            target_resource = arguments.get("path") or arguments.get("file_handle")
 
         # 4B. Authorization check in ledger
         if not ledger.is_authorized(tool_name, target_resource):

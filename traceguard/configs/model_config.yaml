@@ -14,11 +14,14 @@ defaults:
 
 models:
   primary:
-    id: CohereLabs/tiny-aya-global
-    revision: af89d219b53ed9b13b8a4645f9c8028973510324
+    id: CohereLabs/aya-expanse-8b
+    revision: 5062468bf9bc0c6035fd64e06274333ec127d980
   fallback:
     id: CohereLabs/aya-expanse-8b
     revision: 5062468bf9bc0c6035fd64e06274333ec127d980
+  discontinued_tiny_aya:
+    id: CohereLabs/tiny-aya-global
+    revision: af89d219b53ed9b13b8a4645f9c8028973510324
   sandbox_probe:
     id: hf-internal-testing/tiny-random-gpt2   # ungated; infrastructure tests only
     revision: null

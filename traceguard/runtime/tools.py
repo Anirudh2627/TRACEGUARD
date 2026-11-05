@@ -196,7 +196,7 @@ class MockToolExecutor:
 
     # 4. read_document
     def _exec_read_document(self, args: dict[str, Any]) -> ToolResult:
-        doc_id = str(args.get("doc_id", "")).strip()
+        doc_id = str(args.get("doc_id") or args.get("document_id") or "").strip()
         rec = self._documents.get(doc_id)
         if rec is None:
             return ToolResult(
@@ -239,6 +239,31 @@ class MockToolExecutor:
             provenance=ProvenanceLabel.USER_AUTHORIZED,
         )
 
+    def _exec_search_notes(self, args: dict[str, Any]) -> ToolResult:
+        """Alias for retrieve_notes."""
+        return self._exec_retrieve_notes(args)
+
+    def _exec_read_note(self, args: dict[str, Any]) -> ToolResult:
+        """Read a single note by note_id."""
+        note_id = str(args.get("note_id", "")).strip()
+        for n in self._notes:
+            if n.get("note_id") == note_id:
+                return ToolResult(
+                    tool="read_note",
+                    arguments=args,
+                    success=True,
+                    output=n,
+                    provenance=ProvenanceLabel.USER_AUTHORIZED,
+                )
+        return ToolResult(
+            tool="read_note",
+            arguments=args,
+            success=False,
+            output=f"Note {note_id!r} not found",
+            provenance=ProvenanceLabel.UNKNOWN,
+            error="Note not found",
+        )
+
     # 6. save_note
     def _exec_save_note(self, args: dict[str, Any]) -> ToolResult:
         content = str(args.get("content", ""))
@@ -253,9 +278,13 @@ class MockToolExecutor:
             provenance=ProvenanceLabel.USER_AUTHORIZED,
         )
 
+    def _exec_write_note(self, args: dict[str, Any]) -> ToolResult:
+        """Alias for save_note."""
+        return self._exec_save_note(args)
+
     # 7. draft_email (sensitive)
     def _exec_draft_email(self, args: dict[str, Any]) -> ToolResult:
-        to = str(args.get("to", ""))
+        to = str(args.get("to") or args.get("recipient") or "")
         subject = str(args.get("subject", ""))
         body = str(args.get("body", ""))
         draft_record = {"to": to, "subject": subject, "body": body}
@@ -270,7 +299,7 @@ class MockToolExecutor:
 
     # 8. send_email (sensitive)
     def _exec_send_email(self, args: dict[str, Any]) -> ToolResult:
-        to = str(args.get("to", ""))
+        to = str(args.get("to") or args.get("recipient") or "")
         subject = str(args.get("subject", ""))
         body = str(args.get("body", ""))
         sent_record = {"to": to, "subject": subject, "body": body}
@@ -285,7 +314,7 @@ class MockToolExecutor:
 
     # 9. read_private_file (sensitive)
     def _exec_read_private_file(self, args: dict[str, Any]) -> ToolResult:
-        path = str(args.get("path", "")).strip()
+        path = str(args.get("path") or args.get("file_handle") or "").strip()
         rec = self._private_files.get(path)
         if rec is not None:
             return ToolResult(

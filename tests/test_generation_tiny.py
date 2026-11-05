@@ -106,4 +106,4 @@ def test_gated_model_without_token_raises_actionable_error():
     if os.environ.get("HF_TOKEN"):
         pytest.skip("HF_TOKEN present; gating error path not exercised")
     with pytest.raises(ModelAccessError, match="GATED"):
-        load_transformers_backend("CohereLabs/tiny-aya-global", device="cpu", dtype="float32")
+        load_transformers_backend("CohereLabs/aya-expanse-8b", device="cpu", dtype="float32")

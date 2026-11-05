@@ -11,8 +11,10 @@ from traceguard.models.json_parser import load_tool_registry
 
 def test_model_config_pins_primary_and_fallback_revisions():
     cfg = load_app_config()
-    assert cfg.models["primary"].id == "CohereLabs/tiny-aya-global"
-    assert cfg.models["primary"].revision == "af89d219b53ed9b13b8a4645f9c8028973510324"
+    assert cfg.models["primary"].id == "CohereLabs/aya-expanse-8b"
+    assert cfg.models["primary"].revision == "5062468bf9bc0c6035fd64e06274333ec127d980"
+    assert cfg.models["discontinued_tiny_aya"].id == "CohereLabs/tiny-aya-global"
+    assert cfg.models["discontinued_tiny_aya"].revision == "af89d219b53ed9b13b8a4645f9c8028973510324"
     assert cfg.models["fallback"].id == "CohereLabs/aya-expanse-8b"
     assert cfg.models["fallback"].revision == "5062468bf9bc0c6035fd64e06274333ec127d980"
     assert cfg.generation["do_sample"] is False

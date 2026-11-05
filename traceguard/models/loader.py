@@ -267,3 +267,7 @@ def _access_error(model_id: str, revision: Optional[str], exc: Exception) -> Run
             "shell or Colab Secrets. Never commit the token."
         )
     return RuntimeError(f"Failed to load {model_id}@{revision or 'main'}: {exc}")
+
+
+# Alias for compatibility with run_traceguard CLI
+load_model_backend = load_transformers_backend

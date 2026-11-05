@@ -458,6 +458,7 @@ class ProvenanceTracker:
             if combined in {
                 ProvenanceLabel.UNTRUSTED_EXTERNAL,
                 ProvenanceLabel.DERIVED_UNTRUSTED,
+                ProvenanceLabel.UNKNOWN,
             }:
                 return combined
             if arg_name in {"subject", "body"} and user_message:

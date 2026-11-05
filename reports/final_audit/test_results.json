@@ -1,0 +1,43 @@
+{
+  "summary": {
+    "total_test_files": 42,
+    "collected_items": 437,
+    "collection_skipped": 1,
+    "total_session_items": 438,
+    "passed": 433,
+    "runtime_skipped": 4,
+    "total_skipped": 5,
+    "failed": 0,
+    "deselected": 0,
+    "errors": 0,
+    "duration_seconds": 15.91
+  },
+  "skip_breakdown": [
+    {
+      "test_file": "tests/test_safetune_compat.py:17",
+      "skip_type": "collection",
+      "reason": "needs the Python>=3.12 SafeTune env"
+    },
+    {
+      "test_file": "tests/test_generation_tiny.py:50",
+      "skip_type": "runtime",
+      "reason": "HF hub unreachable; integration test needs network"
+    },
+    {
+      "test_file": "tests/test_generation_tiny.py:57",
+      "skip_type": "runtime",
+      "reason": "HF hub unreachable; integration test needs network"
+    },
+    {
+      "test_file": "tests/test_generation_tiny.py:72",
+      "skip_type": "runtime",
+      "reason": "HF hub unreachable; integration test needs network"
+    },
+    {
+      "test_file": "tests/test_generation_tiny.py:100",
+      "skip_type": "runtime",
+      "reason": "HF hub unreachable; integration test needs network"
+    }
+  ],
+  "verification_verdict": "PASSED_LOCAL_AUDIT"
+}
