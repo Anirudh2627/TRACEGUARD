@@ -37,8 +37,16 @@ class TurnExecutionRecord:
     canary_details: list[str] = field(default_factory=list)
     prohibited_action_attempted: bool = False
     prohibited_action_executed: bool = False
+    # Note lineage for save_note / retrieve_notes turns (None for other turns)
+    lineage: Optional[dict[str, Any]] = None
 
     def to_dict(self) -> dict[str, Any]:
+        d = self._base_dict()
+        if self.lineage is not None:
+            d["lineage"] = self.lineage
+        return d
+
+    def _base_dict(self) -> dict[str, Any]:
         return {
             "turn_id": self.turn_id,
             "user_message": self.user_message,

@@ -26,6 +26,13 @@ TraceGuard combines **Strict Source Provenance Tracking**, a dynamic **Authoriza
 
 ## 2. Key Research Findings
 
+> **Read this first: these numbers come from the scripted mock backend, not a real language model.**
+> The mock "model" is a hard-coded attacker that always follows the injected instruction, so
+> E0/E1 leak by construction and the gateway configs (E2a/E2b/E4) block by construction.
+> The tables show that the **runtime and gateway work as designed**. They are **not** evidence
+> about how a real model behaves. Real-model E0-E4 runs are `NOT_RUN` until the model
+> choice is confirmed (see Section 11).
+
 Evaluated across **60 multi-turn episodes** (30 attack, 30 matched benign) spanning three threat families, alongside dedicated multi-turn delayed-injection ablation probes:
 
 ### Aggregate Benchmark (Standard 60 Episodes)
@@ -138,8 +145,8 @@ python scripts/run_demo.py
 TraceGuard is 100% deterministically reproducible offline without requiring GPU hardware or live API keys.
 
 ```powershell
-# 1. Run full test suite (385 passed, 5 skipped)
-pytest tests/ -ra
+# 1. Run full test suite (410 passed, 1 skipped with torch installed)
+python -m pytest -q
 
 # 2. Validate original dataset schemas and split hygiene
 python scripts/validate_dataset.py
@@ -192,7 +199,7 @@ TRACEGUARD/
 │   ├── run_circuit_experiment.py # CircuitKIT experiment CLI
 │   ├── validate_dataset.py # Original dataset validator
 │   └── validate_curated_dataset.py # Curated dataset & checksum validator
-├── tests/                # 385 unit, integration, and security scenario tests (5 skipped)
+├── tests/                # 410 unit, integration, and security scenario tests (1 skipped)
 ├── docs/                 # Full research reports, guides, audits, and checklists
 └── results/              # Evaluation outputs, CircuitKIT results, AuditKIT artifacts
 ```

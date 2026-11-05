@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Union
 
 from traceguard.data.schema import Episode, ProvenanceLabel, validate_provenance_label
+from traceguard.runtime.userinput import split_user_text
 
 # Non-sensitive tools that have general system authorization by default
 DEFAULT_NON_SENSITIVE_TOOLS: frozenset[str] = frozenset(
@@ -43,20 +44,26 @@ class AuthorizationEntry:
     source: str = "user"
     turn_id: int = 0
     provenance: ProvenanceLabel = ProvenanceLabel.USER_AUTHORIZED
+    max_uses: Optional[int] = None  # None = unlimited; 1 = single use ("email me")
 
     def __post_init__(self) -> None:
         if not self.action or not isinstance(self.action, str):
             raise ValueError("AuthorizationEntry action must be a non-empty string")
         validate_provenance_label(self.provenance)
+        if self.max_uses is not None and self.max_uses < 1:
+            raise ValueError("AuthorizationEntry max_uses must be >= 1 or None")
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        d: dict[str, Any] = {
             "action": self.action,
             "resource": self.resource,
             "source": self.source,
             "turn_id": self.turn_id,
             "provenance": self.provenance.value,
         }
+        if self.max_uses is not None:
+            d["max_uses"] = self.max_uses
+        return d
 
 
 class AuthorizationLedger:
@@ -70,6 +77,7 @@ class AuthorizationLedger:
 
     def __init__(self) -> None:
         self._entries: list[AuthorizationEntry] = []
+        self._uses: list[int] = []  # executions consumed per entry (parallel list)
         self.verified_user_emails: set[str] = set()
 
     def is_verified_user_email(self, email: Optional[str]) -> bool:
@@ -90,6 +98,7 @@ class AuthorizationLedger:
         source: str = "user",
         turn_id: int = 0,
         provenance: Union[ProvenanceLabel, str] = ProvenanceLabel.USER_AUTHORIZED,
+        max_uses: Optional[int] = None,
     ) -> bool:
         """Record an authorized action and optional resource in the ledger.
 
@@ -114,9 +123,33 @@ class AuthorizationLedger:
             source=source,
             turn_id=turn_id,
             provenance=prov,
+            max_uses=max_uses,
         )
         self._entries.append(entry)
+        self._uses.append(0)
         return True
+
+    def _has_capacity(self, index: int) -> bool:
+        limit = self._entries[index].max_uses
+        return limit is None or self._uses[index] < limit
+
+    def consume(self, action: str, resource: Optional[str] = None) -> bool:
+        """Record one executed use of an authorization (call after execution).
+
+        Consumes capacity from the first limited entry that authorizes the call.
+        Returns True if a limited entry was consumed.
+        """
+        action_clean = action.strip()
+        res_norm = resource.strip().lower() if resource else None
+        for i, e in enumerate(self._entries):
+            if e.max_uses is None or not self._has_capacity(i):
+                continue
+            if e.action != action_clean and e.action != "*":
+                continue
+            if e.resource == "*" or e.resource == res_norm:
+                self._uses[i] += 1
+                return True
+        return False
 
     def is_authorized(self, action: str, resource: Optional[str] = None) -> bool:
         """Check if an action (and optional target resource) is authorized."""
@@ -124,7 +157,9 @@ class AuthorizationLedger:
         res_norm = resource.strip().lower() if resource else None
 
         matching_entries = [
-            e for e in self._entries if e.action == action_clean or e.action == "*"
+            e
+            for i, e in enumerate(self._entries)
+            if (e.action == action_clean or e.action == "*") and self._has_capacity(i)
         ]
         if not matching_entries:
             return False
@@ -243,12 +278,14 @@ class AuthorizationLedger:
         verified_email = meta.get("verified_user_email")
         if verified_email:
             self.verified_user_emails.add(str(verified_email).strip().lower())
+            # "Email me a summary" authorizes ONE send to the verified address.
             self.record_authorization(
                 action="send_email",
                 resource=str(verified_email),
                 source="system_config",
                 turn_id=0,
                 provenance=ProvenanceLabel.SYSTEM_CONFIG,
+                max_uses=1,
             )
             self.record_authorization(
                 action="draft_email",
@@ -293,6 +330,8 @@ class AuthorizationLedger:
         if not text:
             return
 
+        # Quoted / pasted material is data, never an instruction (brief rule 12).
+        text, _pasted = split_user_text(text)
         text_lower = text.lower()
 
         # Check for explicit email sending / drafting instructions
