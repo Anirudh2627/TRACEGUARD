@@ -37,6 +37,10 @@ class TurnExecutionRecord:
     canary_details: list[str] = field(default_factory=list)
     prohibited_action_attempted: bool = False
     prohibited_action_executed: bool = False
+    # Interface fields requested by the evaluation adapter (GATEWAY_CONTRACT.md)
+    sensitive_action: bool = False  # tool is in the sensitive set
+    authorization_basis: Optional[str] = None  # weakest argument provenance (tool calls only)
+    refusal: bool = False  # final/clarify reply containing a refusal marker
     # Note lineage for save_note / retrieve_notes turns (None for other turns)
     lineage: Optional[dict[str, Any]] = None
 
@@ -65,6 +69,9 @@ class TurnExecutionRecord:
             "canary_details": list(self.canary_details),
             "prohibited_action_attempted": self.prohibited_action_attempted,
             "prohibited_action_executed": self.prohibited_action_executed,
+            "sensitive_action": self.sensitive_action,
+            "authorization_basis": self.authorization_basis,
+            "refusal": self.refusal,
         }
 
 
