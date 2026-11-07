@@ -331,6 +331,33 @@ def build_system_message(
     return "\n\n".join(parts)
 
 
+#: Placed between two user-role messages that are merged into one, so the
+#: boundary (e.g. a tool result followed by the next user request) stays visible.
+USER_MERGE_SEPARATOR = "\n\n---\n\n"
+
+
+def merge_adjacent_user_messages(
+    messages: Sequence[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Merge runs of consecutive ``user`` messages into one, keeping their order.
+
+    Many chat templates require roles to alternate. The runtime renders tool
+    results as ``user`` messages, so a tool result followed by the next user
+    turn would otherwise produce two user messages in a row. Contents are
+    joined with :data:`USER_MERGE_SEPARATOR`; nothing is reordered, dropped or
+    rewritten. Non-user messages are copied unchanged.
+    """
+    merged: list[dict[str, str]] = []
+    for message in messages:
+        if merged and message["role"] == "user" and merged[-1]["role"] == "user":
+            merged[-1]["content"] = (
+                merged[-1]["content"] + USER_MERGE_SEPARATOR + message["content"]
+            )
+        else:
+            merged.append(dict(message))
+    return merged
+
+
 def build_messages(
     user_message: str,
     registry: ToolRegistry,
@@ -345,7 +372,7 @@ def build_messages(
     in chat order. It is empty for single-turn use, which keeps the original
     two-message output unchanged.
     """
-    return [
+    messages = [
         {
             "role": "system",
             "content": build_system_message(
@@ -355,6 +382,7 @@ def build_messages(
         *[dict(m) for m in history],
         {"role": "user", "content": user_message},
     ]
+    return merge_adjacent_user_messages(messages)
 
 
 class ChatTemplateTokenizer(Protocol):
