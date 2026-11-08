@@ -61,7 +61,7 @@ Evaluated across **60 multi-turn episodes** (30 attack, 30 matched benign) spann
 
 | Team Role | Core Ownership & Components |
 | :--- | :--- |
-| **Member 1: AI & Research Lead** | Real model integration (`CohereLabs/tiny-aya-global`), loader plan resolution, strict JSON parser, SafeTune split guard and compatibility, research methodology. |
+| **Member 1: AI & Research Lead** | Real model integration (`CohereLabs/aya-expanse-8b`), loader plan resolution, strict JSON parser, SafeTune split guard and compatibility, research methodology. |
 | **Member 2: Data & Interpretability Lead** | Attack taxonomy, 60-episode attack and matched benign datasets, CuratorKIT curation pipeline, CircuitKIT interpretability infrastructure, dataset cards, and manifests. |
 | **Member 3: Runtime & Evaluation Lead** | Simulated sandboxed tools, Provenance Tracker, Authorization Ledger, Security Gateway, Episode Runner, deterministic metrics, and AuditKIT adapter. |
 
@@ -145,7 +145,7 @@ python scripts/run_demo.py
 TraceGuard is 100% deterministically reproducible offline without requiring GPU hardware or live API keys.
 
 ```powershell
-# 1. Run full test suite (410 passed, 1 skipped with torch installed)
+# 1. Run full test suite (507 passed, 5 skipped)
 python -m pytest -q
 
 # 2. Validate original dataset schemas and split hygiene
@@ -199,7 +199,7 @@ TRACEGUARD/
 │   ├── run_circuit_experiment.py # CircuitKIT experiment CLI
 │   ├── validate_dataset.py # Original dataset validator
 │   └── validate_curated_dataset.py # Curated dataset & checksum validator
-├── tests/                # 410 unit, integration, and security scenario tests (1 skipped)
+├── tests/                # 507 unit, integration, and security scenario tests (5 skipped)
 ├── docs/                 # Full research reports, guides, audits, and checklists
 └── results/              # Evaluation outputs, CircuitKIT results, AuditKIT artifacts
 ```

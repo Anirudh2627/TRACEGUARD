@@ -54,8 +54,8 @@ traceguard/data/circuit/
 
 ### Cryptographic Hashes (SHA-256)
 
-- **DEV Split Hash:** `3c040dc84be41ddf4052a37a8a394bb493f396485b3b1ea1be5b92c9e8ce297d`
-- **TEST Split Hash:** `0ecb1a3fc863622c15d73682c5e3df715e7e80401917b6fbe50cf12fa133ffa7`
+- **DEV Split Hash:** `eba65622de033b87f886f46337b6dd1a12deeded064e5f9e3a275204df3201bd`
+- **TEST Split Hash:** `9f259b6a44e76274f728225b95331b72fd6b8ee62c33a8ff950e60dfaa08b160`
 
 ---
 

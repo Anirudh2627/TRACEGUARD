@@ -25,7 +25,7 @@ All locally testable components—including runtime security, provenance lattice
 ### B. Member-Wise Status
 - **Member 1 (AI & Research Lead):**
   - *Completed:* Strict JSON protocol parser, hardware-aware loader, prompt builder with multi-turn history, SafeTune DEV-only split guards, smoke test harness.
-  - *Pending Kaggle:* 10-task model acceptance smoke test and live weight inference on `CohereLabs/tiny-aya-global`.
+  - *Pending Kaggle:* 10-task model acceptance smoke test and live weight inference on `CohereLabs/aya-expanse-8b`.
 - **Member 2 (Data & Interpretability Lead):**
   - *Completed:* 60 multi-turn episodes, schema, taxonomy, CuratorKIT pipeline (65 quality checks, manifests, cards, checksums), CircuitKIT contrastive pipeline, AuditKIT 1.1.3 adapter (10 serialized artifacts), master evaluation CLI.
   - *Pending Kaggle:* CircuitKIT transformer activation tracing on real weights.
@@ -64,8 +64,8 @@ All locally testable components—including runtime security, provenance lattice
 
 Direct execution of `pytest tests/ -ra`:
 - **Total Test Files:** 42
-- **Total Test Items Considered:** 438 ($437 \text{ collected} + 1 \text{ collection skip}$)
-- **Tests Passed:** **433**
+- **Total Test Items Considered:** 512 ($511 \text{ collected} + 1 \text{ collection skip}$)
+- **Tests Passed:** **507**
 - **Tests Skipped:** **5** (4 runtime network skips in `test_generation_tiny.py` + 1 SafeTune environment skip in `test_safetune_compat.py`)
 - **Tests Failed:** **0**
 - **Runtime Errors:** **0**
@@ -98,4 +98,4 @@ Direct execution of `pytest tests/ -ra`:
 
 # `KAGGLE READY`
 
-All locally testable critical infrastructure, security gateways, provenance tracking, tool executors, dataset curation pipelines, and evaluation scorers have passed 100% of automated tests (433 passed, 0 failed, 5 documented offline skips). The repository is cleanly prepared, mathematically reconciled, and ready for model-backed smoke testing and evaluation in Kaggle.
+All locally testable critical infrastructure, security gateways, provenance tracking, tool executors, dataset curation pipelines, and evaluation scorers have passed 100% of automated tests (507 passed, 0 failed, 5 documented offline skips). The repository is cleanly prepared, mathematically reconciled, and ready for model-backed smoke testing and evaluation in Kaggle.

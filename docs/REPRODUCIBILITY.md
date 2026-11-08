@@ -55,7 +55,7 @@ Run the complete regression suite across all 10 modules:
 ```powershell
 pytest tests/
 ```
-*Expected Result:* **385 passed, 5 skipped** (Direct pytest output: `collected 389 items / 1 skipped; 385 passed, 4 runtime skipped, 1 collection skipped in ~7s`).
+*Expected Result:* **507 passed, 5 skipped** (Direct pytest output: `collected 511 items / 1 skipped; 507 passed, 4 runtime skipped, 1 collection skipped in ~7.35s`).
 *(Note: The 5 skipped tests are offline network skips for live Hugging Face model downloads and the Python 3.12 SafeTune environment check).*
 
 ---
@@ -83,7 +83,7 @@ python scripts/run_traceguard.py --mode mock --split test
 If live Hugging Face credentials and network access are configured:
 ```powershell
 $env:HF_TOKEN="your_huggingface_token"
-python scripts/run_traceguard.py --mode model --model-id CohereLabs/tiny-aya-global --split dev
+python scripts/run_traceguard.py --mode model --model-id CohereLabs/aya-expanse-8b --split dev
 ```
 *(If offline or without token, the system safely reports `NOT_RUN` with diagnostic steps without failing).*
 

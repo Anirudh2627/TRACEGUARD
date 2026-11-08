@@ -20,10 +20,9 @@ All parameters required by Phase 14 and Phase 16 were inspected and verified in 
 
 | Parameter / Requirement | Specification | Verification Status | Implementation File |
 | :--- | :--- | :---: | :--- |
-| **Primary Model ID** | `CohereLabs/tiny-aya-global` | **PINNED** | `traceguard/configs/model_config.yaml:17` |
-| **Primary Model Revision** | `af89d219b53ed9b13b8a4645f9c8028973510324` | **PINNED** | `traceguard/configs/model_config.yaml:18` |
-| **Fallback Model ID** | `CohereLabs/aya-expanse-8b` | **PINNED** | `traceguard/configs/model_config.yaml:20` |
-| **Fallback Model Revision** | `5062468bf9bc0c6035fd64e06274333ec127d980` | **PINNED** | `traceguard/configs/model_config.yaml:21` |
+| **Primary Model ID** | `CohereLabs/aya-expanse-8b` | **PINNED** | `traceguard/configs/model_config.yaml:17` |
+| **Primary Model Revision** | `5062468bf9bc0c6035fd64e06274333ec127d980` | **PINNED** | `traceguard/configs/model_config.yaml:18` |
+| **Discontinued Model** | `CohereLabs/tiny-aya-global` (Failed 7/10 gate) | **DISCONTINUED** | `traceguard/configs/model_config.yaml:23` |
 | **Decoding Strategy** | Greedy decoding (`do_sample: false`) | **ENFORCED** | `GenerationSettings.do_sample = False` |
 | **Sampling Temperature** | `temperature: null`, `top_p: null` | **ENFORCED** | Enforced by `GenerationSettings` dataclass |
 | **Context Limit Protection** | `max_new_tokens: 512`, context check | **ENFORCED** | Rejects prompts exceeding context without truncation |
@@ -60,7 +59,7 @@ The acceptance gate verifies that the model can adhere to the strict JSON tool-c
 python -m traceguard.experiments.smoke_test \
     --model primary \
     --config traceguard/configs/model_config.yaml \
-    --out results/smoke/tiny-aya-global/
+    --out results/smoke/aya-expanse-8b/
 ```
 *Acceptance Criteria:*
 - At least 8/10 tasks must pass (`min_pass: 8`).
@@ -75,7 +74,7 @@ python -m traceguard.experiments.safetune_calibration \
     --model primary \
     --strengths 1,5,10,20 \
     --max-new-tokens 128 \
-    --out results/safetune/calibration-tiny-aya-global/
+    --out results/safetune/calibration-aya-expanse-8b/
 ```
 
 ### Step 5: Run Full Real-Model Evaluation

@@ -29,8 +29,8 @@ Required fields (see `results_schema.py` for full validation):
   "schema_version": "traceguard-episode-result@draft-v0",
   "experiment_id": "e0-e4-dev-2026-11",
   "configuration": "E2b",              // one of E0,E1,E2a,E2b,E3,E4
-  "model_id": "CohereLabs/tiny-aya-global",
-  "model_revision": "af89d219...",     // pinned sha, from model_config.yaml
+  "model_id": "CohereLabs/aya-expanse-8b",
+  "model_revision": "5062468bf9bc0c6035fd64e06274333ec127d980",     // pinned sha, from model_config.yaml
   "split": "dev",                      // dev|test; test refused without explicit flag
   "dataset_version": "benchmark-v0",
   "prompt_mode": "E2b",                // must equal the prompt actually rendered

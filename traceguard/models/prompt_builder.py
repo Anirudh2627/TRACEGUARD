@@ -380,6 +380,31 @@ class RenderedPrompt:
     renderer: str  # "chat_template" | "fallback_template"
 
 
+def normalize_conversation_roles(
+    messages: Sequence[dict[str, str]],
+) -> list[dict[str, str]]:
+    """Normalize a message sequence for chat templates requiring strict role alternation.
+
+    Consecutive messages sharing the same role are consolidated into a single
+    turn separated by double newlines. This ensures compatibility with strict Jinja
+    chat templates (e.g., Cohere Aya, LLaMA, Mistral) without modifying runtime
+    history or dropping tool outputs and provenance metadata.
+    """
+    if not messages:
+        return []
+    normalized: list[dict[str, str]] = []
+    for msg in messages:
+        if normalized and normalized[-1]["role"] == msg["role"]:
+            prev = normalized[-1]
+            normalized[-1] = {
+                **prev,
+                "content": f"{prev['content']}\n\n{msg['content']}",
+            }
+        else:
+            normalized.append(dict(msg))
+    return normalized
+
+
 def render_prompt(
     messages: Sequence[dict[str, str]],
     tokenizer: Optional[ChatTemplateTokenizer] = None,
@@ -391,8 +416,9 @@ def render_prompt(
     two within one run — the choice is recorded in :attr:`RenderedPrompt.renderer`.
     """
     if tokenizer is not None and getattr(tokenizer, "chat_template", None):
+        normalized = normalize_conversation_roles(messages)
         text = tokenizer.apply_chat_template(
-            list(messages), tokenize=False, add_generation_prompt=True
+            normalized, tokenize=False, add_generation_prompt=True
         )
         return RenderedPrompt(text=str(text), renderer="chat_template")
     system = "\n".join(m["content"] for m in messages if m["role"] == "system")

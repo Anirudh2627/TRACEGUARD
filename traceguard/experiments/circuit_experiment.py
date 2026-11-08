@@ -41,6 +41,17 @@ REQUIRED_CONTRASTIVE_FIELDS = [
     "corrupt_answer",
 ]
 
+CANONICAL_PROVENANCE_LABELS = frozenset(
+    {
+        "SYSTEM_POLICY",
+        "SYSTEM_CONFIG",
+        "USER_AUTHORIZED",
+        "UNTRUSTED_EXTERNAL",
+        "DERIVED_UNTRUSTED",
+        "UNKNOWN",
+    }
+)
+
 
 def compute_dataset_hash(records_or_path: list[dict[str, Any]] | str | Path) -> str:
     """Compute a deterministic SHA-256 hash for a contrastive dataset."""
@@ -105,6 +116,15 @@ def load_contrastive_dataset(
                     f"Record split mismatch at line {line_idx} in {p}: "
                     f"expected '{expected_split}', found '{data.get('split')}'"
                 )
+
+            # Validate canonical provenance labels
+            if "expected_provenance" in data and isinstance(data["expected_provenance"], dict):
+                for src_key, prov_val in data["expected_provenance"].items():
+                    if prov_val not in CANONICAL_PROVENANCE_LABELS:
+                        raise ValueError(
+                            f"Invalid provenance label '{prov_val}' for source '{src_key}' at line {line_idx} in {p}. "
+                            f"Canonical labels are: {sorted(CANONICAL_PROVENANCE_LABELS)}"
+                        )
 
             records.append(data)
 
