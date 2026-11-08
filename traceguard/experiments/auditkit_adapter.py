@@ -55,6 +55,7 @@ def turn_to_auditkit_events(
 
     events: list[Any] = []
     idx = start_index
+    call_id = f"turn{turn.turn_id}_call"
 
     # 1. User message event
     events.append(
@@ -82,8 +83,16 @@ def turn_to_auditkit_events(
                 "arguments": turn.parsed_arguments,
                 "argument_provenance": turn.argument_provenance,
                 "parse_reason_code": turn.parse_reason_code,
+                # AuditKIT call shape (``name``/``arguments``) so its tool-call
+                # scorers can read the call; the TraceGuard keys above are kept.
+                **(
+                    {"name": turn.parsed_tool, "arguments": turn.parsed_arguments or {}}
+                    if turn.parsed_tool
+                    else {}
+                ),
             },
             turn_id=turn.turn_id,
+            call_id=call_id if turn.parsed_tool else None,
             source="traceguard_model",
         )
     )
@@ -119,8 +128,10 @@ def turn_to_auditkit_events(
                     "tool_name": turn.parsed_tool,
                     "tool_result": turn.tool_result or {},
                     "prohibited_action_executed": turn.prohibited_action_executed,
+                    "output": turn.tool_result or {},
                 },
                 turn_id=turn.turn_id,
+                call_id=call_id,
                 source="traceguard_simulated_tools",
             )
         )
@@ -171,6 +182,12 @@ def to_auditkit_episode(
         source_id=log.episode_id,
         source_scores=source_scores,
         metadata=metadata,
+        coverage={
+            "tool_call_names": "observed",
+            "tool_call_arguments": "observed",
+            "tool_results": "observed",
+            "call_result_pairing": "observed",
+        },
     )
     return agent_ep
 
