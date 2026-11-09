@@ -140,6 +140,67 @@ def turn_to_auditkit_events(
     return events
 
 
+_OBSERVED = "observed"
+_UNAVAILABLE = "unavailable"
+
+
+def compute_coverage(events: Sequence[Any]) -> tuple[dict[str, str], dict[str, int]]:
+    """Derive AuditKIT coverage flags from the events that were actually emitted.
+
+    Nothing is assumed. A flag is ``observed`` only when the events prove it:
+
+    * ``tool_call_names`` / ``tool_call_arguments``: at least one call-shaped
+      ``tool_call`` event exists (arguments: every call carries a dict).
+    * ``tool_results``: at least one ``tool_result`` exists and every call the
+      gateway ALLOWED has one.
+    * ``call_result_pairing``: at least one call is matched to a result by
+      ``call_id`` and no allowed call is missing its result.
+
+    A gateway-denied call never produces a result, so it is not a pair and never
+    makes ``call_result_pairing`` (or ``tool_results``) observed by itself.
+    Everything else is ``unavailable``. Also returns the counts behind the flags.
+    """
+    calls = [
+        e for e in events
+        if getattr(e, "type", None) == "tool_call"
+        and isinstance(e.payload.get("name"), str)
+        and e.payload.get("name")
+    ]
+    results = [e for e in events if getattr(e, "type", None) == "tool_result"]
+    decisions = {
+        e.turn_id: e.payload.get("gateway_decision")
+        for e in events
+        if getattr(e, "type", None) == "gateway_decision"
+    }
+    result_ids = {e.call_id for e in results if e.call_id}
+
+    paired = [c for c in calls if c.call_id and c.call_id in result_ids]
+    denied = [c for c in calls if decisions.get(c.turn_id) == "DENY"]
+    allowed_missing = [
+        c for c in calls
+        if decisions.get(c.turn_id) == "ALLOW" and not (c.call_id and c.call_id in result_ids)
+    ]
+
+    def flag(ok: bool) -> str:
+        return _OBSERVED if ok else _UNAVAILABLE
+
+    coverage = {
+        "tool_call_names": flag(bool(calls)),
+        "tool_call_arguments": flag(
+            bool(calls) and all(isinstance(c.payload.get("arguments"), dict) for c in calls)
+        ),
+        "tool_results": flag(bool(results) and not allowed_missing),
+        "call_result_pairing": flag(bool(paired) and not allowed_missing),
+    }
+    detail = {
+        "n_tool_calls": len(calls),
+        "n_paired": len(paired),
+        "n_denied": len(denied),
+        "n_allowed_missing_result": len(allowed_missing),
+    }
+    return coverage, detail
+
+
 def to_auditkit_episode(
     log: EpisodeExecutionLog, episode: Optional[Episode] = None
 ) -> Any:
@@ -174,6 +235,8 @@ def to_auditkit_episode(
         metadata["authorized_scope"] = episode.authorized_scope
         metadata["synthetic_canaries"] = [c.value for c in episode.synthetic_canaries]
 
+    coverage, coverage_detail = compute_coverage(all_events)
+
     agent_ep = AgentEpisode(
         case_id=log.episode_id,
         events=all_events,
@@ -182,13 +245,9 @@ def to_auditkit_episode(
         source_id=log.episode_id,
         source_scores=source_scores,
         metadata=metadata,
-        coverage={
-            "tool_call_names": "observed",
-            "tool_call_arguments": "observed",
-            "tool_results": "observed",
-            "call_result_pairing": "observed",
-        },
+        coverage=coverage,
     )
+    agent_ep.metadata["coverage_detail"] = coverage_detail
     return agent_ep
 
 
