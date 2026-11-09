@@ -24,6 +24,13 @@ pip install -r requirements/requirements-base.txt
 pip install curatorkit==0.1.22 circuitkit==0.2.0 auditkit==1.1.3
 ```
 
+
+> **Windows troubleshooting**
+> - If `pip install circuitkit==0.2.0` fails with a wheel-build error (`transformers-stream-generator`), retry with `python -m pip install --no-cache-dir circuitkit==0.2.0`.
+> - If PowerShell reports "An Application Control policy has blocked this file" for `pip.exe`, use `python -m pip ...` instead of `pip ...`.
+> - If `Activate.ps1` is blocked, run `Set-ExecutionPolicy -Scope Process Bypass` first.
+> - Verified on Windows 11, Python 3.13, fresh clone of `main` with a fresh virtual environment: 534 passed, 1 skipped.
+
 ---
 
 ## 3. Dataset Integrity Verification
