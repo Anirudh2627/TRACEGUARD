@@ -10,6 +10,7 @@ and generates reproducible, machine-readable metrics and artifacts under results
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence, Union
 
@@ -21,6 +22,7 @@ from traceguard.runtime.logging import EpisodeExecutionLog
 from traceguard.runtime.runner import EpisodeRunner
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+DATASET_SOURCES = ("source", "curated")
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "results" / "evaluation"
 
 
@@ -139,15 +141,55 @@ class SimulationAuditBackend:
 class Evaluator:
     """Evaluates TraceGuard datasets across configurations E0 to E4."""
 
-    def __init__(self, data_dir: Optional[Union[str, Path]] = None) -> None:
+    def __init__(
+        self,
+        data_dir: Optional[Union[str, Path]] = None,
+        dataset_source: str = "source",
+    ) -> None:
+        if dataset_source not in DATASET_SOURCES:
+            raise ValueError(
+                f"dataset_source must be one of {DATASET_SOURCES}, got {dataset_source!r}"
+            )
         self.data_dir = Path(data_dir) if data_dir else DATA_DIR
+        self.dataset_source = dataset_source
+
+    def _verify_curated_file(self, path: Path) -> None:
+        """Fail closed unless ``path`` matches its SHA-256 in curated/checksums.txt."""
+        checksums = path.parent / "checksums.txt"
+        if not checksums.exists():
+            raise FileNotFoundError(f"Curated checksums file not found: {checksums}")
+        expected = None
+        for line in checksums.read_text(encoding="utf-8").splitlines():
+            parts = line.strip().split(maxsplit=1)
+            if len(parts) == 2 and Path(parts[1]).name == path.name:
+                expected = parts[0]
+                break
+        if expected is None:
+            raise ValueError(f"No checksum entry for curated file {path.name}")
+        # The recorded digests were produced on Windows (CRLF line endings) while
+        # git stores LF, so accept the bytes as stored OR with line endings
+        # normalised either way. Any change to the CONTENT still fails.
+        raw = path.read_bytes()
+        lf = raw.replace(b"\r\n", b"\n")
+        crlf = lf.replace(b"\n", b"\r\n")
+        digests = {hashlib.sha256(b).hexdigest() for b in (raw, lf, crlf)}
+        if expected not in digests:
+            raise ValueError(
+                f"Curated file {path.name} failed SHA-256 verification "
+                f"(expected {expected}, got {hashlib.sha256(raw).hexdigest()})"
+            )
 
     def load_episodes(
         self, split: str = "test"
     ) -> tuple[list[Episode], list[Episode]]:
         """Load attack and benign episodes for the specified split."""
-        attack_path = self.data_dir / f"episodes_attack_{split}.jsonl"
-        benign_path = self.data_dir / f"episodes_benign_{split}.jsonl"
+        if self.dataset_source == "curated":
+            curated_dir = self.data_dir / "curated"
+            attack_path = curated_dir / f"attack_{split}.jsonl"
+            benign_path = curated_dir / f"benign_{split}.jsonl"
+        else:
+            attack_path = self.data_dir / f"episodes_attack_{split}.jsonl"
+            benign_path = self.data_dir / f"episodes_benign_{split}.jsonl"
 
         if not attack_path.exists():
             raise FileNotFoundError(f"Attack dataset not found: {attack_path}")
@@ -167,6 +209,24 @@ class Evaluator:
                 line = line.strip()
                 if line:
                     benign_episodes.append(Episode.from_json(line))
+
+        if self.dataset_source == "curated":
+            # Integrity first, then confirm the curated files hold the same
+            # episodes (IDs, in order) as the validated source files.
+            for path in (attack_path, benign_path):
+                self._verify_curated_file(path)
+            for kind, loaded in (("attack", attack_episodes), ("benign", benign_episodes)):
+                src = self.data_dir / f"episodes_{kind}_{split}.jsonl"
+                if src.exists():
+                    src_ids = [
+                        Episode.from_json(l.strip()).episode_id
+                        for l in src.read_text(encoding="utf-8").splitlines()
+                        if l.strip()
+                    ]
+                    if src_ids != [e.episode_id for e in loaded]:
+                        raise ValueError(
+                            f"Curated {kind}_{split} episodes do not match source episode IDs"
+                        )
 
         return attack_episodes, benign_episodes
 

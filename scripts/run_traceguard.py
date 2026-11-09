@@ -48,7 +48,7 @@ from traceguard.experiments.auditkit_adapter import (
     export_auditkit_evaluation,
     is_auditkit_available,
 )
-from traceguard.experiments.evaluation import DATA_DIR, RESULTS_DIR, Evaluator
+from traceguard.experiments.evaluation import DATA_DIR, DATASET_SOURCES, RESULTS_DIR, Evaluator
 from traceguard.experiments.metrics import ConfigurationMetrics, compute_metrics
 from traceguard.runtime.logging import EpisodeExecutionLog
 
@@ -157,6 +157,13 @@ def run_evaluation_cli() -> int:
         help="Export evaluation results in AuditKIT format (results/auditkit/).",
     )
     parser.add_argument(
+        "--dataset-source",
+        choices=list(DATASET_SOURCES),
+        default="source",
+        help="'source' (default): traceguard/data/episodes_*.jsonl. "
+        "'curated': CuratorKIT output in <data-dir>/curated/, verified against checksums.txt.",
+    )
+    parser.add_argument(
         "--data-dir",
         type=Path,
         default=DATA_DIR,
@@ -219,7 +226,7 @@ def run_evaluation_cli() -> int:
 
     # 3. Execution Setup
     splits_to_run = ["dev", "test"] if args.split == "both" else [args.split]
-    evaluator = Evaluator(data_dir=args.data_dir)
+    evaluator = Evaluator(data_dir=args.data_dir, dataset_source=args.dataset_source)
     out_dir = args.output_dir
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -249,6 +256,7 @@ def run_evaluation_cli() -> int:
         "python_version": platform.python_version(),
         "platform": platform.platform(),
         "dataset_hashes": dataset_hashes,
+        "dataset_source": args.dataset_source,
         "seed": args.seed,
         "splits": {},
     }
