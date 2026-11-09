@@ -161,6 +161,85 @@ def export_contrastive_to_csv(
     return out_path
 
 
+def resolve_circuit_precision(
+    requested_precision: Optional[str] = "auto",
+    device: Optional[str] = None,
+) -> tuple[str, str, dict[str, Any]]:
+    """Resolve hardware device and precision dtype for CircuitKIT experiments.
+
+    Args:
+        requested_precision: 'auto' (default), 'bfloat16', 'float16', or 'float32'.
+        device: 'auto' (or None), 'cuda', or 'cpu'.
+
+    Returns:
+        (resolved_device, resolved_precision, hardware_info_dict)
+    """
+    import torch
+    from traceguard.models.loader import cuda_supports_bf16
+
+    cuda_avail = torch.cuda.is_available()
+    if device is None or device == "auto":
+        target_device = "cuda" if cuda_avail else "cpu"
+    else:
+        target_device = device.lower()
+
+    if target_device not in ("cuda", "cpu"):
+        raise ValueError(f"Unsupported device '{device}'. Must be 'auto', 'cuda', or 'cpu'")
+
+    bf16_supported = cuda_supports_bf16() if cuda_avail else False
+    device_name = torch.cuda.get_device_name(0) if cuda_avail and target_device == "cuda" else "CPU"
+    device_capability = None
+    if cuda_avail and target_device == "cuda":
+        try:
+            device_capability = torch.cuda.get_device_capability()
+        except Exception:
+            device_capability = None
+
+    req = (requested_precision or "auto").lower()
+
+    if target_device == "cuda":
+        if not cuda_avail:
+            raise RuntimeError("CUDA device requested but torch.cuda.is_available() is False")
+
+        if req == "auto":
+            resolved_precision = "bfloat16" if bf16_supported else "float16"
+        elif req == "bfloat16":
+            if not bf16_supported:
+                raise ValueError(
+                    f"Explicit precision 'bfloat16' is not supported on CUDA device '{device_name}' "
+                    f"(compute capability {device_capability} < 8.0). Use 'float16' or 'auto'."
+                )
+            resolved_precision = "bfloat16"
+        elif req in ("float16", "float32"):
+            resolved_precision = req
+        else:
+            raise ValueError(f"Unsupported precision '{requested_precision}' for CUDA device")
+
+    else:  # CPU
+        if req == "auto":
+            resolved_precision = "float32"
+        elif req == "float32":
+            resolved_precision = "float32"
+        elif req == "bfloat16":
+            resolved_precision = "bfloat16"
+        elif req == "float16":
+            raise ValueError("Explicit precision 'float16' is not supported for CPU execution in PyTorch")
+        else:
+            raise ValueError(f"Unsupported precision '{requested_precision}' for CPU device")
+
+    hardware_info = {
+        "device": target_device,
+        "device_name": device_name,
+        "cuda_available": cuda_avail,
+        "cuda_supports_bf16": bf16_supported,
+        "device_capability": device_capability,
+        "selected_precision": resolved_precision,
+        "requested_precision": requested_precision,
+    }
+
+    return target_device, resolved_precision, hardware_info
+
+
 class CircuitKITAdapter:
     """Adapter for inspecting environment capabilities and wrapping CircuitKIT APIs."""
 
@@ -184,6 +263,8 @@ class CircuitKITAdapter:
             "torch_available": False,
             "torch_version": None,
             "cuda_available": False,
+            "cuda_supports_bf16": False,
+            "cuda_capability": None,
             "device": "cpu",
         }
 
@@ -196,11 +277,18 @@ class CircuitKITAdapter:
 
         try:
             import torch
+            from traceguard.models.loader import cuda_supports_bf16
+
             info["torch_available"] = True
             info["torch_version"] = torch.__version__
             info["cuda_available"] = torch.cuda.is_available()
+            info["cuda_supports_bf16"] = cuda_supports_bf16() if torch.cuda.is_available() else False
             if torch.cuda.is_available():
                 info["device"] = f"cuda ({torch.cuda.get_device_name(0)})"
+                try:
+                    info["cuda_capability"] = torch.cuda.get_device_capability()
+                except Exception:
+                    info["cuda_capability"] = None
         except ImportError:
             pass
 
@@ -214,11 +302,12 @@ class CircuitKITAdapter:
         precision: str = "bfloat16",
         device: Optional[str] = None,
         task_name: Optional[str] = None,
+        model_revision: Optional[str] = None,
     ) -> Any:
-        """Construct a CircuitKIT Pipeline from a contrastive CSV file."""
+        """Construct a CircuitKIT Pipeline from a contrastive CSV file with exact revision pinning."""
         from circuitkit import Pipeline
 
-        return Pipeline.from_custom_data(
+        pipe = Pipeline.from_custom_data(
             model_name=model_name,
             data_path=str(csv_path),
             clean_prompt="{clean_prompt}",
@@ -230,6 +319,61 @@ class CircuitKITAdapter:
             device=device,
             output_dir=output_dir,
         )
+        pipe.model_revision = model_revision
+
+        # Propagate exact revision into CircuitKIT model loader
+        if model_revision:
+            orig_ensure = pipe._ensure_model
+
+            def pinned_ensure_model() -> Any:
+                if pipe._model is None:
+                    from circuitkit import quick
+
+                    pipe._model = quick.load_model(
+                        pipe.model_name,
+                        dtype=pipe.precision,
+                        device=pipe._device,
+                        revision=model_revision,
+                    )
+                return pipe._model
+
+            pipe._ensure_model = pinned_ensure_model
+
+        return pipe
+
+    @staticmethod
+    def register_custom_task(
+        model: Any,
+        csv_path: str | Path,
+        task_name: Optional[str] = None,
+        algorithm: str = "eap-ig",
+    ) -> str:
+        """Register a custom CSV dataset as a CircuitKIT task using CircuitKIT's prepare_custom_task."""
+        from circuitkit.api import prepare_custom_task
+
+        csv_p = Path(csv_path)
+        if not csv_p.exists():
+            raise FileNotFoundError(f"Custom task CSV not found at {csv_p}")
+
+        derived_name = task_name or f"traceguard_contrastive_{csv_p.stem}"
+        cfg = {
+            "data": {
+                "type": "template",
+                "path": str(csv_p),
+                "template": {
+                    "clean_prompt": "{clean_prompt}",
+                    "clean_answer": "{clean_answer}",
+                    "corrupt_prompt": "{corrupt_prompt}",
+                    "corrupt_answer": "{corrupt_answer}",
+                },
+            },
+            "discovery": {
+                "algorithm": algorithm,
+            },
+        }
+
+        registered_name = prepare_custom_task(cfg, model, task_name=derived_name)
+        return registered_name
 
 
 class CircuitExperimentRunner:
@@ -294,6 +438,14 @@ class CircuitExperimentRunner:
         # Validate datasets and ensure split guard is intact
         self.validate_datasets()
 
+        # Resolve hardware device and precision
+        resolved_device, resolved_precision, hw_info = resolve_circuit_precision(
+            requested_precision=config.precision,
+            device=config.device,
+        )
+        config.precision = resolved_precision
+        config.device = resolved_device
+
         # Split guard rule: Circuit discovery MUST strictly and exclusively consume development data.
         # Held-out test data is reserved exclusively for post-discovery evaluation.
         dev_records = load_contrastive_dataset(self.dev_path, expected_split="dev")
@@ -307,7 +459,11 @@ class CircuitExperimentRunner:
 
         # Target evaluation records (dev or test)
         if config.split == "test":
+            if not self.test_path.exists():
+                raise FileNotFoundError(f"Held-out test dataset not found at {self.test_path}")
             eval_records = load_contrastive_dataset(self.test_path, expected_split="test")
+            if len(eval_records) == 0:
+                raise ValueError(f"Held-out test dataset at {self.test_path} contains 0 records")
             eval_hash = compute_dataset_hash(eval_records)
             eval_csv_file = output_dir / "contrastive_test.csv"
             export_contrastive_to_csv(eval_records, eval_csv_file)
@@ -319,27 +475,45 @@ class CircuitExperimentRunner:
         target_records = eval_records
         dataset_hash = eval_hash
 
-        # Case 1: No pipeline / model supplied (Member 1 awaiting integration)
-        if pipeline is None and (not config.model_name or config.model_name.strip() == ""):
+        # Case 1: No pipeline / model supplied (Member 1 awaiting integration / offline CPU)
+        is_mock = isinstance(pipeline, MockCircuitPipeline) or getattr(pipeline, "_is_mock", False)
+        is_cpu_offline = not hw_info["cuda_available"]
+        no_model_supplied = not config.model_name or config.model_name.strip() == ""
+
+        if pipeline is None and (no_model_supplied or config.dry_run or is_cpu_offline):
+            notes_reason = (
+                "Real model not supplied; awaiting Member 1 model connection on GPU (Track B)"
+                if not no_model_supplied
+                else "Real model not supplied; awaiting Member 1 model connection"
+            )
             discovery_result = DiscoveryResult(
                 status=CircuitStatus.NOT_RUN.value,
                 algorithm=config.algorithm,
                 level=config.level,
                 target_sparsity=config.sparsity,
-                error_message="Real model not supplied; awaiting Member 1 model connection",
+                error_message=notes_reason,
                 metadata={
                     "split": config.split,
                     "dataset_hash": dataset_hash,
                     "discovery_dataset": "contrastive_dev",
                     "discovery_hash": dev_hash,
                     "test_data_in_discovery": False,
+                    "model_name": config.model_name,
+                    "model_revision": config.model_revision,
+                    "hardware": hw_info,
                 },
             )
 
             faithfulness_result = FaithfulnessResult(
                 status=CircuitStatus.NOT_RUN.value,
                 pillars_evaluated=list(config.pillars),
-                error_message="Real model not supplied; awaiting Member 1 model connection",
+                error_message=notes_reason,
+                pillar_details={
+                    "evaluated_split": config.split,
+                    "evaluated_dataset_hash": dataset_hash,
+                    "model_name": config.model_name,
+                    "model_revision": config.model_revision,
+                },
             )
 
             intervention_result = InterventionResult(
@@ -358,7 +532,7 @@ class CircuitExperimentRunner:
                 discovery=discovery_result,
                 faithfulness=faithfulness_result,
                 intervention=intervention_result,
-                notes="Real model not supplied; awaiting Member 1 model connection",
+                notes=notes_reason,
             )
 
             summary.verify_no_fabricated_scores()
@@ -366,14 +540,13 @@ class CircuitExperimentRunner:
             return summary
 
         # Case 2: Pipeline or mock pipeline supplied
-        is_mock = isinstance(pipeline, MockCircuitPipeline) or getattr(pipeline, "_is_mock", False)
-
         # Discovery pipeline is always constructed from dev_csv_file (ensures test data never enters discovery)
         if pipeline is None:
             if not CircuitKITAdapter.is_circuitkit_available():
                 raise RuntimeError("CircuitKIT is required to run live experiments")
             pipeline = CircuitKITAdapter.build_pipeline_from_csv(
                 model_name=config.model_name,
+                model_revision=config.model_revision,
                 csv_path=dev_csv_file,
                 output_dir=str(output_dir),
                 precision=config.precision,
@@ -433,6 +606,11 @@ class CircuitExperimentRunner:
                     "discovery_hash": dev_hash,
                     "test_data_in_discovery": False,
                     "is_mock": is_mock,
+                    "model_name": config.model_name,
+                    "model_revision": config.model_revision,
+                    "device": config.device,
+                    "precision": config.precision,
+                    "hardware": hw_info,
                 },
             )
         except Exception as e:
@@ -469,11 +647,38 @@ class CircuitExperimentRunner:
         t_eval_start = time.time()
         try:
             n_eval = min(config.n_eval_examples, len(target_records))
-            pipeline.evaluate(
-                pillars=config.pillars,
-                n_examples=n_eval,
-                n_stability_runs=config.n_stability_runs,
-            )
+            eval_kwargs: dict[str, Any] = {
+                "pillars": config.pillars,
+                "n_examples": n_eval,
+                "n_stability_runs": config.n_stability_runs,
+            }
+
+            if is_mock:
+                eval_kwargs["target_records"] = target_records
+                eval_kwargs["split"] = config.split
+            elif config.split == "test":
+                # Explicitly register held-out TEST task into CircuitKIT
+                test_task_name = f"traceguard_contrastive_{eval_csv_file.stem}"
+                registered_name = CircuitKITAdapter.register_custom_task(
+                    model=pipeline._ensure_model(),
+                    csv_path=eval_csv_file,
+                    task_name=test_task_name,
+                    algorithm=config.algorithm,
+                )
+                from circuitkit.tasks.registry import is_task_registered
+
+                if not is_task_registered(registered_name):
+                    raise RuntimeError(
+                        f"Failed to register TEST task '{registered_name}' in CircuitKIT registry. "
+                        "Aborting evaluation to prevent silent fallback to DEV data."
+                    )
+                # Route evaluation explicitly to the held-out TEST task
+                eval_discovery_cfg = dict(pipeline._discovery_cfg["discovery"])
+                eval_discovery_cfg["task"] = registered_name
+                eval_kwargs["discovery"] = eval_discovery_cfg
+                pipeline._discovery_cfg["discovery"]["task"] = registered_name
+
+            pipeline.evaluate(**eval_kwargs)
             eval_duration = time.time() - t_eval_start
 
             report = getattr(pipeline, "report", None)
@@ -494,6 +699,18 @@ class CircuitExperimentRunner:
                     pillar_details = report.to_dict()
                 elif dataclasses.is_dataclass(report):
                     pillar_details = dataclasses.asdict(report)
+
+            # Record evaluation metadata
+            pillar_details.update(
+                {
+                    "evaluated_split": config.split,
+                    "evaluated_dataset_hash": dataset_hash,
+                    "n_evaluated": n_eval,
+                    "model_name": config.model_name,
+                    "model_revision": config.model_revision,
+                    "selected_precision": config.precision,
+                }
+            )
 
             scores = [s for s in (patching_score, ablation_score) if s is not None]
             overall_faith = round(sum(scores) / len(scores), 4) if scores else None
@@ -599,21 +816,25 @@ class MockFaithfulnessReport:
         stability: float = 0.9100,
         robustness: float = 0.8540,
         generalization: float = 0.7920,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         self.patching_score = patching_score
         self.ablation_score = ablation_score
         self.stability = stability
         self.robustness = robustness
         self.generalization = generalization
+        self.metadata = metadata or {}
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        data = {
             "patching_score": self.patching_score,
             "ablation_score": self.ablation_score,
             "stability": self.stability,
             "robustness": self.robustness,
             "generalization": self.generalization,
         }
+        data.update(self.metadata)
+        return data
 
 
 class MockCircuit:
@@ -644,6 +865,8 @@ class MockCircuitPipeline:
         self._circuit: Optional[MockCircuit] = None
         self._artifact_path: Optional[str] = None
         self.report: Optional[MockFaithfulnessReport] = None
+        self.evaluated_records: list[dict[str, Any]] = []
+        self.evaluated_split: Optional[str] = None
 
     def discover(self, **kwargs: Any) -> MockCircuitPipeline:
         if self.fail_discovery:
@@ -652,10 +875,65 @@ class MockCircuitPipeline:
         self._artifact_path = f"{self.output_dir}/mock_circuit.pt"
         return self
 
-    def evaluate(self, **kwargs: Any) -> MockCircuitPipeline:
+    def evaluate(
+        self,
+        target_records: Optional[list[dict[str, Any]]] = None,
+        split: Optional[str] = None,
+        pillars: Optional[list[str]] = None,
+        n_examples: Optional[int] = None,
+        **kwargs: Any,
+    ) -> MockCircuitPipeline:
         if self.fail_evaluation:
             raise RuntimeError("Simulated evaluation failure in MockCircuitPipeline")
-        self.report = MockFaithfulnessReport()
+
+        if target_records is not None:
+            if not isinstance(target_records, list) or len(target_records) == 0:
+                raise ValueError("target_records must be a non-empty list of contrastive records")
+            self.evaluated_records = target_records
+            self.evaluated_split = split or target_records[0].get("split", "unknown")
+        elif "discovery" in kwargs and isinstance(kwargs["discovery"], dict):
+            task_name = kwargs["discovery"].get("task", "")
+            self.evaluated_split = "test" if "test" in task_name else "dev"
+
+        # Deterministically derive mock scores based on actual records consumed
+        if self.evaluated_records:
+            split_hash = compute_dataset_hash(self.evaluated_records)
+            int_hash = int(split_hash[:8], 16)
+            offset = ((int_hash % 500) / 500.0 - 0.5) * 0.04
+
+            if self.evaluated_split == "test":
+                # Distinct scores for held-out TEST evaluation
+                patching = round(0.8450 + offset, 4)
+                ablation = round(0.7890 + offset, 4)
+                stability = round(0.8800 + offset * 0.5, 4)
+                robustness = round(0.8250 + offset * 0.5, 4)
+                generalization = round(0.7680 + offset * 0.5, 4)
+            else:
+                # DEV evaluation baseline
+                patching = 0.8842
+                ablation = 0.8215
+                stability = 0.9100
+                robustness = 0.8540
+                generalization = 0.7920
+        else:
+            patching = 0.8842
+            ablation = 0.8215
+            stability = 0.9100
+            robustness = 0.8540
+            generalization = 0.7920
+
+        self.report = MockFaithfulnessReport(
+            patching_score=patching,
+            ablation_score=ablation,
+            stability=stability,
+            robustness=robustness,
+            generalization=generalization,
+            metadata={
+                "evaluated_split": self.evaluated_split or split or "dev",
+                "n_evaluated": len(self.evaluated_records) if self.evaluated_records else (n_examples or 0),
+                "is_mock": True,
+            },
+        )
         return self
 
     def intervene(self) -> dict[str, Any]:
