@@ -55,7 +55,7 @@ Run the complete regression suite across all 10 modules:
 ```powershell
 pytest tests/
 ```
-*Expected Result:* **546 passed, 1 skipped** (`collected 546 items / 1 skipped`: 546 passed, 0 runtime skipped, 1 collection skipped).
+*Expected Result:* **560 passed, 1 skipped** (`collected 560 items / 1 skipped`: 560 passed, 0 runtime skipped, 1 collection skipped).
 *(Skipped tests are NOT executed. Totals depend on the machine: tests needing Hugging Face network access or the Python 3.12 SafeTune environment skip when those are unavailable. Use `pytest tests/ -ra` to see exactly what ran. Details: `reports/final_audit/TEST_RESULTS.md`.)*
 
 ---

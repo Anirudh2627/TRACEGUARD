@@ -63,9 +63,9 @@ All locally testable components—including runtime security, provenance lattice
 ## 3. Test Suite Summary
 
 Direct execution of `pytest tests/ -ra`:
-- **Total Test Files:** 53
-- **Total Test Items Considered:** 547 (546 collected + 1 collection skip)
-- **Tests Passed:** **546**
+- **Total Test Files:** 54
+- **Total Test Items Considered:** 561 (560 collected + 1 collection skip)
+- **Tests Passed:** **560**
 - **Tests Skipped:** **1** (not executed; see `TEST_RESULTS.md`)
 - **Tests Failed:** **0**
 - **Runtime Errors:** **0**
@@ -98,4 +98,4 @@ Direct execution of `pytest tests/ -ra`:
 
 # `KAGGLE READY`
 
-All locally testable critical infrastructure, security gateways, provenance tracking, tool executors, dataset curation pipelines, and evaluation scorers have passed 100% of the automated tests that were executed (546 passed, 0 failed, 1 skipped and NOT executed). The repository is cleanly prepared, mathematically reconciled, and ready for model-backed smoke testing and evaluation in Kaggle.
+All locally testable critical infrastructure, security gateways, provenance tracking, tool executors, dataset curation pipelines, and evaluation scorers have passed 100% of the automated tests that were executed (560 passed, 0 failed, 1 skipped and NOT executed). The repository is cleanly prepared, mathematically reconciled, and ready for model-backed smoke testing and evaluation in Kaggle.
