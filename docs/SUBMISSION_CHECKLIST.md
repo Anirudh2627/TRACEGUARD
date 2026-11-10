@@ -71,7 +71,7 @@
 
 ## 5. Test Suite & Verification
 
-- [x] **Full Regression:** `534 passed, 1 skipped` (from `pytest tests/ -ra`; the skipped test, `test_safetune_compat.py:17`, was not executed).
+- [x] **Full Regression:** `560 passed, 1 skipped` (from `pytest tests/ -ra`; the skipped test, `test_safetune_compat.py:17`, was not executed).
 - [x] **Original Dataset Validator:** `python scripts/validate_dataset.py` (60/60 PASSED).
 - [x] **Curated Dataset Validator:** `python scripts/validate_curated_dataset.py` (60/60 PASSED).
 - [x] **8 Security Scenarios:** `tests/test_module10_security_scenarios.py` (8/8 PASSED).
