@@ -16,7 +16,11 @@ from pathlib import Path
 # Add project root to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from traceguard.experiments.circuit_config import CircuitExperimentConfig
+from traceguard.experiments.circuit_config import (
+    DEFAULT_MODEL_NAME,
+    DEFAULT_MODEL_REVISION,
+    CircuitExperimentConfig,
+)
 from traceguard.experiments.circuit_experiment import (
     CircuitExperimentRunner,
     CircuitKITAdapter,
@@ -84,6 +88,28 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Optional path to a JSON configuration file",
     )
+    parser.add_argument(
+        "--model-name",
+        default=DEFAULT_MODEL_NAME,
+        help=f"Hugging Face model ID (default: {DEFAULT_MODEL_NAME})",
+    )
+    parser.add_argument(
+        "--model-revision",
+        default=DEFAULT_MODEL_REVISION,
+        help=f"Exact model revision hash (default: {DEFAULT_MODEL_REVISION})",
+    )
+    parser.add_argument(
+        "--precision",
+        choices=["auto", "bfloat16", "float16", "float32"],
+        default="auto",
+        help="Hardware precision (default: auto)",
+    )
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cuda", "cpu"],
+        default=None,
+        help="Hardware device target (default: auto-detect)",
+    )
     return parser.parse_args()
 
 
@@ -131,6 +157,27 @@ def main() -> int:
             return 1
         with open(config_path, "r", encoding="utf-8") as f:
             cfg = CircuitExperimentConfig.from_dict(json.load(f))
+        # CLI arguments explicitly passed override config file values
+        if "--split" in sys.argv:
+            cfg.split = args.split
+        if "--model-name" in sys.argv:
+            cfg.model_name = args.model_name
+        if "--model-revision" in sys.argv:
+            cfg.model_revision = args.model_revision
+        if "--precision" in sys.argv:
+            cfg.precision = args.precision
+        if "--device" in sys.argv:
+            cfg.device = args.device
+        if "--algorithm" in sys.argv:
+            cfg.algorithm = args.algorithm
+        if "--sparsity" in sys.argv:
+            cfg.sparsity = args.sparsity
+        if "--out-dir" in sys.argv:
+            cfg.output_dir = args.out_dir
+        if "--intervention" in sys.argv:
+            cfg.allow_intervention = args.intervention
+        if args.dry_run:
+            cfg.dry_run = True
     else:
         cfg = CircuitExperimentConfig(
             algorithm=args.algorithm,
@@ -138,14 +185,23 @@ def main() -> int:
             split=args.split,
             output_dir=args.out_dir,
             allow_intervention=args.intervention,
+            model_name=args.model_name,
+            model_revision=args.model_revision,
+            precision=args.precision,
+            device=args.device,
+            dry_run=args.dry_run,
         )
 
     print("\n=======================================================")
     print("TraceGuard Module 8: CircuitKIT Interpretability Runner")
     print("=======================================================")
     print(f"Target Split:      {cfg.split}")
+    print(f"Model ID:          {cfg.model_name}")
+    print(f"Model Revision:    {cfg.model_revision}")
     print(f"Algorithm:         {cfg.algorithm}")
     print(f"Target Sparsity:   {cfg.sparsity}")
+    print(f"Requested Dtype:   {cfg.precision}")
+    print(f"Target Device:     {cfg.device or 'auto'}")
     print(f"Pillars:           {cfg.pillars}")
     print(f"Output Directory:  {cfg.output_dir}")
     print(f"Intervention:      {cfg.allow_intervention}")

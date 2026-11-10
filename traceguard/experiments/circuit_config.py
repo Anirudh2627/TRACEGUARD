@@ -33,6 +33,10 @@ ALLOWED_PILLARS = {
     "generalization",
 }
 
+DEFAULT_MODEL_NAME = "CohereLabs/aya-expanse-8b"
+DEFAULT_MODEL_REVISION = "5062468bf9bc0c6035fd64e06274333ec127d980"
+ALLOWED_PRECISIONS = {"auto", "bfloat16", "float16", "float32"}
+
 
 @dataclass
 class CircuitExperimentConfig:
@@ -49,12 +53,14 @@ class CircuitExperimentConfig:
     n_eval_examples: int = 64
     n_stability_runs: int = 3
     output_dir: str = "results/circuit"
-    model_name: Optional[str] = None
+    model_name: Optional[str] = DEFAULT_MODEL_NAME
+    model_revision: Optional[str] = DEFAULT_MODEL_REVISION
     allow_intervention: bool = False
     task_name: Optional[str] = None
     split: str = "dev"
-    precision: str = "bfloat16"
+    precision: str = "auto"
     device: Optional[str] = None
+    dry_run: bool = False
 
     def __post_init__(self) -> None:
         self.validate()
@@ -118,6 +124,25 @@ class CircuitExperimentConfig:
 
         if not self.output_dir or not str(self.output_dir).strip():
             raise ValueError("output_dir must be a non-empty string path")
+
+        if self.precision not in ALLOWED_PRECISIONS:
+            raise ValueError(
+                f"Invalid precision '{self.precision}'. Must be one of: {sorted(ALLOWED_PRECISIONS)}"
+            )
+
+        if self.model_name and self.model_name.strip():
+            if self.model_revision is None or not str(self.model_revision).strip():
+                raise ValueError(
+                    "model_revision is required when model_name is specified; "
+                    "must be an exact pinned revision hash"
+                )
+
+        if self.device is not None:
+            dev_lower = str(self.device).strip().lower()
+            if not (dev_lower in ("auto", "cpu") or dev_lower.startswith("cuda")):
+                raise ValueError(
+                    f"Invalid device '{self.device}'. Must be 'auto', 'cuda', 'cpu', or a valid cuda device identifier"
+                )
 
     def to_dict(self) -> dict[str, Any]:
         """Convert configuration to dictionary."""

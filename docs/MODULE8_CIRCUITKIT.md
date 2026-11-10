@@ -125,26 +125,62 @@ python scripts/run_circuit_experiment.py --split dev --dry-run
 ### Mock Pipeline Integration Test
 ```bash
 python scripts/run_circuit_experiment.py --split dev --mock --intervention
+python scripts/run_circuit_experiment.py --split test --mock
 ```
-*Output: Runs the complete end-to-end pipeline with mock discovery and faithfulness evaluation to verify reporting and serialization.*
+*Output: Runs the complete end-to-end pipeline with mock discovery on DEV and faithfulness evaluation on the selected split (DEV or held-out TEST) to verify reporting and serialization.*
+
+### Real Model Execution (GPU Track B - Kaggle / Colab)
+```bash
+python scripts/run_circuit_experiment.py \
+    --model-name CohereLabs/aya-expanse-8b \
+    --model-revision 5062468bf9bc0c6035fd64e06274333ec127d980 \
+    --split dev \
+    --algorithm eap-ig \
+    --sparsity 0.15 \
+    --precision auto \
+    --out-dir results/circuit/dev_real
+
+python scripts/run_circuit_experiment.py \
+    --model-name CohereLabs/aya-expanse-8b \
+    --model-revision 5062468bf9bc0c6035fd64e06274333ec127d980 \
+    --split test \
+    --algorithm eap-ig \
+    --sparsity 0.15 \
+    --precision auto \
+    --out-dir results/circuit/test_real
+```
+*Prerequisites: CUDA GPU accelerator (>= 16GB VRAM, e.g. A100 or 2x T4), `HF_TOKEN` with access to `CohereLabs/aya-expanse-8b`.*
 
 ---
 
 ## 6. Integration Contract for Member 1 (Real Model Lead)
 
-When Member 1 has initialized the real model (e.g. Tiny Aya or Aya Expanse) in an environment with sufficient accelerator resources:
+When Member 1 initializes the real model (`CohereLabs/aya-expanse-8b`) in an environment with accelerator resources:
 
-1. Provide model identifier: `config = CircuitExperimentConfig(model_name="CohereForAI/aya-expanse-8b", split="dev")`
-2. Pass initialized pipeline directly:
+1. Provide model identifier and revision:
+   ```python
+   config = CircuitExperimentConfig(
+       model_name="CohereLabs/aya-expanse-8b",
+       model_revision="5062468bf9bc0c6035fd64e06274333ec127d980",
+       split="test",
+       precision="auto",  # Resolves to bfloat16 on Ampere+, float16 on T4
+   )
+   ```
+2. Pass configuration or initialized pipeline:
    ```python
    from traceguard.experiments.circuit_config import CircuitExperimentConfig
    from traceguard.experiments.circuit_experiment import CircuitExperimentRunner, CircuitKITAdapter
 
    runner = CircuitExperimentRunner()
-   cfg = CircuitExperimentConfig(model_name="your_model_path", split="dev")
+   cfg = CircuitExperimentConfig(
+       model_name="CohereLabs/aya-expanse-8b",
+       model_revision="5062468bf9bc0c6035fd64e06274333ec127d980",
+       split="test",
+   )
 
-   # CircuitKITAdapter will automatically convert contrastive JSONL to CSV
-   # and call circuitkit.Pipeline.from_custom_data(...)
+   # CircuitKITAdapter converts contrastive JSONL to CSV, runs discovery
+   # exclusively on DEV data, registers the held-out TEST task into CircuitKIT,
+   # routes faithfulness evaluation to TEST, and records artifacts.
    summary = runner.run(cfg)
    ```
 3. Artifacts will be populated in `results/circuit/` with status `SUCCESS` and verified nodes and faithfulness scores.
