@@ -145,7 +145,7 @@ python scripts/run_demo.py
 TraceGuard is 100% deterministically reproducible offline without requiring GPU hardware or live API keys.
 
 ```powershell
-# 1. Run full test suite (534 passed, 1 skipped)
+# 1. Run full test suite (560 passed, 1 skipped)
 python -m pytest -q
 
 # 2. Validate original dataset schemas and split hygiene
@@ -199,7 +199,7 @@ TRACEGUARD/
 │   ├── run_circuit_experiment.py # CircuitKIT experiment CLI
 │   ├── validate_dataset.py # Original dataset validator
 │   └── validate_curated_dataset.py # Curated dataset & checksum validator
-├── tests/                # 534 unit, integration, and security scenario tests (1 skipped)
+├── tests/                # 560 unit, integration, and security scenario tests (1 skipped)
 ├── docs/                 # Full research reports, guides, audits, and checklists
 └── results/              # Evaluation outputs, CircuitKIT results, AuditKIT artifacts
 ```
