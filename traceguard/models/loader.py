@@ -159,6 +159,7 @@ def load_transformers_backend(
     settings: Optional[GenerationSettings] = None,
     trust_remote_code: bool = False,
     prompt_truncation: Optional[int] = None,
+    device_map: Optional[str] = None,
 ) -> TransformersBackend:
     """Load model + tokenizer and wrap them in a greedy :class:`TransformersBackend`.
 
@@ -171,6 +172,10 @@ def load_transformers_backend(
         trust_remote_code: Passed through to transformers; default False.
         prompt_truncation: EXPLICIT opt-in max prompt tokens (infrastructure
             runs on small-context probe models only; real runs must leave None).
+        device_map: Optional accelerate placement strategy (``"auto"``,
+            ``"balanced"``, ``"sequential"``) to spread one model across several
+            GPUs (e.g. fp16 8B on 2x T4). Default None keeps the single-device
+            behaviour. CUDA only.
 
     Raises:
         ModelAccessError: gated/unauthorized/network failures, with guidance.
@@ -179,6 +184,13 @@ def load_transformers_backend(
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     plan = resolve_loading_plan(model_id, revision, device, dtype, load_in_4bit)
+    if device_map is not None:
+        if device_map not in ("auto", "balanced", "sequential"):
+            raise ValueError(
+                f"device_map must be 'auto', 'balanced' or 'sequential', got {device_map!r}"
+            )
+        if plan.device != "cuda":
+            raise ValueError("device_map requires a CUDA device")
     settings = settings or GenerationSettings()
     token = _hf_token()
 
@@ -199,7 +211,7 @@ def load_transformers_backend(
     # default, so only pass it for CUDA (avoids a hard accelerate dependency
     # for CPU-only sandbox runs).
     if plan.device == "cuda":
-        model_kwargs["device_map"] = plan.device
+        model_kwargs["device_map"] = device_map or plan.device
     if load_in_4bit:
         from transformers import BitsAndBytesConfig
 
