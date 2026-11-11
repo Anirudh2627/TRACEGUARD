@@ -108,7 +108,7 @@ def run_validation_phase(data_dir: Path) -> bool:
         return False
 
 
-def run_evaluation_cli() -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="TraceGuard master evaluation runner (mock and model-backed)."
     )
@@ -123,6 +123,36 @@ def run_evaluation_cli() -> int:
         type=str,
         default="CohereLabs/aya-expanse-8b",
         help="Model ID for model-backed mode.",
+    )
+    parser.add_argument(
+        "--revision",
+        type=str,
+        default=None,
+        help="Model revision (commit sha). Default: the revision pinned for this "
+        "model id in traceguard/configs/model_config.yaml, if any.",
+    )
+    parser.add_argument(
+        "--load-in-4bit",
+        action="store_true",
+        help="Load the model with 4-bit NF4 quantization (CUDA only).",
+    )
+    parser.add_argument(
+        "--dtype",
+        choices=["auto", "bfloat16", "float16", "float32"],
+        default="auto",
+        help="Model dtype (default 'auto': hardware-aware).",
+    )
+    parser.add_argument(
+        "--device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Device for model-backed mode (default 'auto').",
+    )
+    parser.add_argument(
+        "--device-map",
+        choices=["auto", "balanced", "sequential"],
+        default=None,
+        help="Spread the model across several GPUs (e.g. fp16 8B on 2x T4). CUDA only.",
     )
     parser.add_argument(
         "--split",
@@ -181,8 +211,38 @@ def run_evaluation_cli() -> int:
         default=42,
         help="Random seed for reproducibility.",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def pinned_revision_for(model_id: str) -> Optional[str]:
+    """Revision pinned for ``model_id`` in traceguard/configs/model_config.yaml, if any."""
+    from traceguard.models.config import load_app_config
+
+    for ref in load_app_config().models.values():
+        if ref.id == model_id and ref.revision:
+            return ref.revision
+    return None
+
+
+def build_model_loading_kwargs(args: argparse.Namespace) -> dict[str, Any]:
+    """Keyword arguments for ``load_model_backend`` from the CLI flags.
+
+    The revision defaults to the one pinned in model_config.yaml for this model
+    id (so model-backed runs use the same weights as the smoke test); an
+    explicit ``--revision`` overrides it, and an unpinned model gets ``None``.
+    """
+    return {
+        "model_id": args.model_id,
+        "revision": args.revision or pinned_revision_for(args.model_id),
+        "device": args.device,
+        "dtype": args.dtype,
+        "load_in_4bit": args.load_in_4bit,
+        "device_map": args.device_map,
+    }
+
+
+def run_evaluation_cli() -> int:
+    args = build_parser().parse_args()
 
     print_banner(mode=args.mode, split=args.split, configs=args.configs)
 
@@ -198,11 +258,13 @@ def run_evaluation_cli() -> int:
 
     # 2. Model Backend Resolution
     backend = None
+    model_loading: Optional[dict[str, Any]] = None
     if args.mode == "model":
         print(f"\n[PHASE 2] Loading model backend: {args.model_id}...")
         try:
             from traceguard.models.loader import load_model_backend
-            backend = load_model_backend(model_id=args.model_id, device="auto", dtype="auto")
+            model_loading = build_model_loading_kwargs(args)
+            backend = load_model_backend(**model_loading)
             print(f"  [OK] Model {args.model_id} loaded successfully.")
         except Exception as exc:
             print("\n" + "!" * 72)
@@ -257,6 +319,7 @@ def run_evaluation_cli() -> int:
         "platform": platform.platform(),
         "dataset_hashes": dataset_hashes,
         "dataset_source": args.dataset_source,
+        "model_loading": model_loading,
         "seed": args.seed,
         "splits": {},
     }
