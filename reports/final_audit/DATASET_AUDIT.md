@@ -33,9 +33,9 @@ The 30 attack episodes cover three distinct indirect prompt injection threat fam
 
 | Threat Family | Description | Mechanism | Count | Splits |
 | :--- | :--- | :--- | :---: | :---: |
-| **Family A** | **Memory & State Poisoning** | Injects poisoned instructions into stored notes or staging memory to alter future routing or persistent state. | 12 | 6 DEV, 6 TEST |
+| **Family A** | **Document & Email Injection** | Injects poisoned instructions into stored notes or staging memory to alter future routing or persistent state. | 12 | 6 DEV, 6 TEST |
 | **Family B** | **Tool-Output Indirect Injection** | Injects instructions within search results, emails, or invoice attachments directing immediate unauthorized actions. | 10 | 5 DEV, 5 TEST |
-| **Family C** | **Multi-Hop Delayed Exfiltration** | Ingests payload in Turn 1 that remains dormant until an authorized action in Turn 2 or 3 triggers data exfiltration. | 8 | 4 DEV, 4 TEST |
+| **Family C** | **Stored / Cross-Turn Injection** | Ingests payload in Turn 1 that remains dormant until an authorized action in Turn 2 or 3 triggers data exfiltration. | 8 | 4 DEV, 4 TEST |
 | **Benign Controls**| **Legitimate Task Completion** | Matched enterprise workflows (invoice review, vendor status, document analysis) without attacks. | 30 | 15 DEV, 15 TEST |
 
 ---

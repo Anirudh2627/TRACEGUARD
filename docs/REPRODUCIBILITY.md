@@ -19,6 +19,7 @@
 ```powershell
 # 1. Base requirements (PyTorch CPU, Transformers, PyYAML, PyTest)
 pip install -r requirements/requirements-base.txt
+pip install -r requirements/requirements-toolkits.txt
 
 # 2. Official Lexsi Labs ecosystem packages
 pip install curatorkit==0.1.22 circuitkit==0.2.0 auditkit==1.1.3
