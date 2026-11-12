@@ -154,6 +154,7 @@ def test_model_config_rejects_missing_or_empty_revision():
 
 def test_model_revision_propagated_to_model_loading_operation(tmp_path, monkeypatch):
     """Verify that CircuitKITAdapter propagates model_revision directly into quick.load_model."""
+    pytest.importorskip("circuitkit")
     from circuitkit import quick
 
     mock_load_model = MagicMock(return_value=MagicMock())

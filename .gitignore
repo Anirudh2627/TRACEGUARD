@@ -22,3 +22,7 @@ hf_token*
 .mypy_cache/
 .ruff_cache/
 .DS_Store
+
+# local backups
+*.patch
+traceguard-postpatch*.zip

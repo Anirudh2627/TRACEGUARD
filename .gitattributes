@@ -1,0 +1,8 @@
+* text=auto
+*.jsonl text eol=lf
+*.json text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+traceguard/data/curated/checksums.txt text eol=lf
+*.zip binary
