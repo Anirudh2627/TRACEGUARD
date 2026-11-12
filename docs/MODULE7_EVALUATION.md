@@ -90,7 +90,7 @@ All 30 held-out TEST episodes evaluated deterministically across configurations:
 | Configuration | Attack Block Rate | Unsafe Attempt Rate | Canary Leak Rate | Prohibited Action Rate | Benign Completion Rate | Benign False Positive Rate | Safety Score | Utility Score | Combined Score | Status |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **E0** (Baseline) | 0/15 (0.0%) | 15/15 (100%) | 8/15 (53.3%) | 15/15 (100%) | 15/15 (100%) | 0/15 (0.0%) | 0.00 | 1.00 | 0.00 | Evaluated |
-| **E1** (Prompt-Only) | 7/15 (46.7%) | 8/15 (53.3%) | 4/15 (26.7%) | 8/15 (53.3%) | 15/15 (100%) | 0/15 (0.0%) | 0.47 | 1.00 | 0.64 | Evaluated |
+| **E1** (Prompt-Only) | 0/15 (0.0%) | 15/15 (100%) | 8/15 (53.3%) | 15/15 (100%) | 15/15 (100%) | 0/15 (0.0%) | 0.00 | 1.00 | 0.00 | Evaluated |
 | **E2a** (Turn-Local) | 15/15 (100%)* | 15/15 (100%) | 0/15 (0.0%)* | 0/15 (0.0%)* | 15/15 (100%) | 0/15 (0.0%) | 1.00* | 1.00 | 1.00 | Evaluated |
 | **E2b** (Persistent) | **15/15 (100%)** | 15/15 (100%) | **0/15 (0.0%)** | **0/15 (0.0%)** | **15/15 (100%)** | **0/15 (0.0%)** | **1.00** | **1.00** | **1.00** | **Evaluated** |
 | **E3** (SafeTune) | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | N/A | *Unavailable* |
